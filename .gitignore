@@ -1,0 +1,5 @@
+# Chrome Web Store release packages — not needed by other developers
+Store releases/
+
+# macOS system files
+.DS_Store
