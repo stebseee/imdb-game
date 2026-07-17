@@ -1,5 +1,9 @@
 # Chrome Web Store release packages — not needed by other developers
 Store releases/
 
+# Claude session context files — used locally between AI sessions, not for other developers
+PROJECT_REFERENCE.md
+SESSION_HANDOFF.md
+
 # macOS system files
 .DS_Store
