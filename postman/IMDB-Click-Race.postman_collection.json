@@ -1,0 +1,306 @@
+{
+  "info": {
+    "name": "IMDB Click Race - Firebase API",
+    "description": "Practice collection that mirrors the Firebase Realtime Database calls made by content.js in the IMDB Click Race extension. Run the requests in folder order (1 -> 6) to simulate a game lifecycle: sign in, create a game, have a 'player' join, send a chat message, read it back, then clean up.\n\nAll requests use the {{db_url}}, {{firebase_api_key}} and {{id_token}} variables from the 'IMDB Click Race - Local' environment - select that environment before running anything.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Firebase Anonymous Sign-In",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={{firebase_api_key}}",
+          "protocol": "https",
+          "host": ["identitytoolkit", "googleapis", "com"],
+          "path": ["v1", "accounts:signUp"],
+          "query": [{ "key": "key", "value": "{{firebase_api_key}}" }]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"returnSecureToken\": true\n}"
+        },
+        "description": "This is the same call getFirebaseToken() makes in content.js when there's no cached token yet. Firebase issues a fresh anonymous user + an idToken (used for the ?auth= param on every database call) and a refreshToken (so we don't have to sign in again every time).\n\nThe Tests tab below automatically saves both tokens into your environment so the rest of the requests in this collection 'just work'."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const data = pm.response.json();",
+              "",
+              "pm.test(\"Status code is 200\", () => {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response contains an idToken\", () => {",
+              "    pm.expect(data).to.have.property('idToken');",
+              "});",
+              "",
+              "// Save the tokens so every other request in this collection can use them",
+              "if (data.idToken) {",
+              "    pm.environment.set('id_token', data.idToken);",
+              "    console.log('Saved new id_token to environment');",
+              "}",
+              "if (data.refreshToken) {",
+              "    pm.environment.set('refresh_token', data.refreshToken);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Create Test Game (PUT)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{db_url}}/games/{{test_game_id}}.json?auth={{id_token}}",
+          "host": ["{{db_url}}"],
+          "path": ["games", "{{test_game_id}}.json"],
+          "query": [{ "key": "auth", "value": "{{id_token}}" }]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"hostId\": \"{{test_player_id}}\",\n  \"status\": \"lobby\",\n  \"createdAt\": {{$timestamp}}000,\n  \"players\": {\n    \"{{test_player_id}}\": {\n      \"name\": \"Postman Tester\",\n      \"clicks\": 0,\n      \"ready\": false,\n      \"gaveUp\": false\n    }\n  }\n}"
+        },
+        "description": "This mirrors what createGameAndStart() does in content.js: a PUT writes a brand new game record at games/{gameId}, completely replacing whatever was there before (PUT = 'set this whole object').\n\nNote: {{$timestamp}} is a Postman dynamic variable (current Unix time in seconds) - we multiply by 1000 to match the millisecond timestamps the extension uses (Date.now())."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", () => {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response is not an error\", () => {",
+              "    const data = pm.response.json();",
+              "    pm.expect(data).to.not.have.property('error');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Read Game State (GET)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{db_url}}/games/{{test_game_id}}.json?auth={{id_token}}",
+          "host": ["{{db_url}}"],
+          "path": ["games", "{{test_game_id}}.json"],
+          "query": [{ "key": "auth", "value": "{{id_token}}" }]
+        },
+        "description": "This mirrors dbGet() in content.js - a plain GET returns the full JSON for that path. Run this any time after step 2 to see the current state of your test game, and again after steps 4/5 to see your changes land."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", () => {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Game has a hostId\", () => {",
+              "    const data = pm.response.json();",
+              "    pm.expect(data).to.have.property('hostId');",
+              "});",
+              "",
+              "console.log('Current game state:', pm.response.json());"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Update Player Clicks (PATCH)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{db_url}}/games/{{test_game_id}}/players/{{test_player_id}}.json?auth={{id_token}}",
+          "host": ["{{db_url}}"],
+          "path": ["games", "{{test_game_id}}", "players", "{{test_player_id}}.json"],
+          "query": [{ "key": "auth", "value": "{{id_token}}" }]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clicks\": 3,\n  \"name\": \"Postman Tester\",\n  \"gaveUp\": false\n}"
+        },
+        "description": "This mirrors the click-tracking dbPatch() call in content.js (the one that fires every time a player clicks an actor link). PATCH only updates the fields you send - everything else on the player record (like 'ready') is left untouched.\n\nTry running step 3 before and after this request to see just the 'clicks' field change."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", () => {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response echoes the patched fields\", () => {",
+              "    const data = pm.response.json();",
+              "    pm.expect(data).to.have.property('clicks', 3);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Send Chat Message (PATCH with generated key)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{db_url}}/games/{{test_game_id}}/chat/{{$randomAlphaNumeric}}{{$randomAlphaNumeric}}.json?auth={{id_token}}",
+          "host": ["{{db_url}}"],
+          "path": ["games", "{{test_game_id}}", "chat", "{{$randomAlphaNumeric}}{{$randomAlphaNumeric}}.json"],
+          "query": [{ "key": "auth", "value": "{{id_token}}" }]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"playerName\": \"Postman Tester\",\n  \"message\": \"Hello from Postman!\",\n  \"timestamp\": {{$timestamp}}000\n}"
+        },
+        "description": "This mirrors sendChatMessage() in content.js. In the real extension, randId(10) generates a random key for each chat message so multiple messages don't overwrite each other. Here {{$randomAlphaNumeric}} (a Postman dynamic variable) does the same job - each click of Send produces a fresh random path.\n\nAfter running this a few times, run step 3 (Read Game State) and look under the 'chat' object - you should see one entry per message, each with its own random key."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", () => {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response echoes the message\", () => {",
+              "    const data = pm.response.json();",
+              "    pm.expect(data).to.have.property('message', 'Hello from Postman!');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Delete Test Game (DELETE - cleanup)",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{db_url}}/games/{{test_game_id}}.json?auth={{id_token}}",
+          "host": ["{{db_url}}"],
+          "path": ["games", "{{test_game_id}}.json"],
+          "query": [{ "key": "auth", "value": "{{id_token}}" }]
+        },
+        "description": "This mirrors dbDelete(), used by cleanupOldGames() to remove stale games after 24 hours. Run this last to remove the TESTPM01 game you created in step 2, so it doesn't clutter your real Firebase database.\n\nAfter running this, step 3 (Read Game State) should return 'null'."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", () => {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response is null (deleted)\", () => {",
+              "    pm.expect(pm.response.text()).to.eql('null');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. SIMULATE: Add Fake Player to a REAL Game (PATCH)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{db_url}}/games/{{real_game_id}}/players/{{fake_player_id}}.json?auth={{id_token}}",
+          "host": ["{{db_url}}"],
+          "path": ["games", "{{real_game_id}}", "players", "{{fake_player_id}}.json"],
+          "query": [{ "key": "auth", "value": "{{id_token}}" }]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"{{fake_player_name}}\",\n  \"clicks\": 0,\n  \"ready\": false,\n  \"gaveUp\": false\n}"
+        },
+        "description": "THIS IS THE FUN ONE. Use this to make a 'fake' second (or third) player join a REAL game you've created in your browser using the actual extension.\n\nHOW TO USE:\n1. In your browser, load the extension on IMDB and create a real game (as host). Open the lobby.\n2. Find the real game ID - it's shown in the lobby UI, or you can check chrome.storage via the extension's debug tools.\n3. In this Postman environment, set 'real_game_id' to that real game ID (click the eye icon next to the environment dropdown, or open the environment and edit the value directly).\n4. Make sure you've run request 1 (Sign-In) so {{id_token}} is populated.\n5. Click Send on THIS request.\n6. Switch back to your browser - the lobby should update live (via the extension's SSE sync) to show 'Postman Bot' as a new player, with NO page reload needed.\n\nTry changing 'fake_player_id' and 'fake_player_name' and sending again to add a 3rd, 4th player etc. - great for testing how your lobby UI handles multiple players without juggling Chrome profiles.\n\nWARNING: this writes into a REAL game, so only do this on a test game you created yourself (not a real friend's game!), and remember to leave/delete the game afterwards to clean up."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", () => {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Fake player was written\", () => {",
+              "    const data = pm.response.json();",
+              "    pm.expect(data).to.have.property('name');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. (Bonus) Try Without Auth Token - should fail",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{db_url}}/games/{{test_game_id}}.json",
+          "host": ["{{db_url}}"],
+          "path": ["games", "{{test_game_id}}.json"]
+        },
+        "description": "This deliberately omits the ?auth={{id_token}} parameter. Your Firebase Security Rules require auth != null, so this should be rejected with 'Permission denied'.\n\nThis is a good one to run first (before step 1) and again after step 1, to see the same request behave differently depending on whether you're authenticated - a nice illustration of how the extension's auth layer protects the database."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Request is rejected without auth\", () => {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "",
+              "pm.test(\"Error mentions permission\", () => {",
+              "    const data = pm.response.json();",
+              "    pm.expect(JSON.stringify(data).toLowerCase()).to.include('permission');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
