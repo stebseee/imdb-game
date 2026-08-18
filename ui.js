@@ -1927,15 +1927,15 @@ function renderPlayersList(playersObj, gameStatus, isHost = false) {
       row.appendChild(nameSpan);
       row.appendChild(kickBtn);
     } else {
-      // Add ready button for players in lobby
-      if (gameStatus === 'lobby' && p.pid !== playerId) {
+      // Add a Ready Up button to the player's OWN row in the lobby
+      if (gameStatus === 'lobby' && p.pid === playerId) {
         row.style.display = 'flex';
         row.style.alignItems = 'center';
         row.style.justifyContent = 'space-between';
         const nameSpan = document.createElement('span');
         nameSpan.textContent = label + statusLabel;
-        
-        // Add ready button for non-host players in lobby
+
+        // Toggles this player's own ready flag
         const readyBtn = document.createElement('button');
         readyBtn.textContent = p.ready ? 'READY' : 'Ready Up';
         readyBtn.title = `Mark as ready`;
