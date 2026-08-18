@@ -28,7 +28,7 @@
     "content_scripts": [
       {
         "matches": ["https://www.imdb.com/*"],
-        "js": ["actors.js", "content.js"],
+        "js": ["actors.js", "config.js", "utils.js", "firebase.js", "imdb.js", "ui.js", "game.js", "page-filters.js", "main.js"],
         "css": ["content.css"],
         "run_at": "document_idle"
       }
