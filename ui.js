@@ -1927,7 +1927,45 @@ function renderPlayersList(playersObj, gameStatus, isHost = false) {
       row.appendChild(nameSpan);
       row.appendChild(kickBtn);
     } else {
-      row.innerHTML = label + statusLabel;
+      // Add ready button for players in lobby
+      if (gameStatus === 'lobby' && p.pid !== playerId) {
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = label + statusLabel;
+        
+        // Add ready button for non-host players in lobby
+        const readyBtn = document.createElement('button');
+        readyBtn.textContent = p.ready ? 'READY' : 'Ready Up';
+        readyBtn.title = `Mark as ready`;
+        Object.assign(readyBtn.style, {
+          marginLeft: '8px', 
+          background: p.ready ? '#27ae60' : '#3498db', 
+          border: 'none',
+          color: '#fff', 
+          cursor: 'pointer', 
+          fontSize: '11px',
+          fontWeight: 'bold', 
+          padding: '2px 7px', 
+          borderRadius: '3px',
+          flexShrink: '0', 
+          lineHeight: '1.4'
+        });
+        
+        // Add click handler for ready button
+        readyBtn.addEventListener('click', () => {
+          // Update ready status in Firebase
+          dbPatch(`${gameId}/players/${p.pid}`, { ready: !p.ready }).catch(err => {
+            console.error("Failed to update ready status:", err);
+          });
+        });
+        
+        row.appendChild(nameSpan);
+        row.appendChild(readyBtn);
+      } else {
+        row.innerHTML = label + statusLabel;
+      }
     }
     playersList.appendChild(row);
   }
