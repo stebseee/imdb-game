@@ -633,6 +633,29 @@ async function processSnapshot(snapshot) {
     dbPatch(`${gameId}/players/${playerId}`, { gaveUp: false, gaveUpAt: null, clicks: 0 }).catch(() => {});
   }
 
+  // Safety net: end a stuck round. If the round is active but nobody is still playing —
+  // everyone present has given up (or gone unreachable) and no one finished — there's no way
+  // to produce a winner, so the round would otherwise hang until the timer runs out. This
+  // catches e.g. host gives up, then the other player leaves: conclude with no winner so the
+  // remaining player gets the board and can Play Again to continue the session solo. The host
+  // is authoritative here to avoid multiple clients racing the same write.
+  if (gameId && role === 'host' && snapshot.status === 'active' && !snapshot.winner && snapshot.startedAt) {
+    const now = Date.now();
+    const present = playerIds.filter(pid => players[pid]);
+    const stillActive = present.filter(pid => {
+      const pr = players[pid];
+      if (pr.finishedAt || pr.gaveUp) return false;
+      const lastSeen = Number(pr.lastSeen) || 0;
+      const sinceStart = now - Number(snapshot.startedAt);
+      if (lastSeen === 0 && sinceStart < 10000) return true; // grace before first heartbeat
+      return (now - lastSeen) < 10000;
+    });
+    const finishers = present.filter(pid => players[pid].finishedAt && !players[pid].gaveUp);
+    if (present.length > 0 && stillActive.length === 0 && finishers.length === 0) {
+      dbPatch(`${gameId}`, { winner: null, winnerClicks: null, status: 'finished' }).catch(() => {});
+    }
+  }
+
   // Detect being kicked: we have a gameId but our player record is gone.
   // Works in both lobby and active rounds — host can now kick mid-round.
   // _leavingGame guard prevents this firing when the player left voluntarily (including as host).
