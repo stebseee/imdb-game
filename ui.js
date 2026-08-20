@@ -443,6 +443,15 @@ startRoundBtn.className = "blue-button";
 actionRow.appendChild(startRoundBtn);
 actionRow.appendChild(copybtn);
 
+// Host-only hint shown under Start Round when it's disabled (waiting for another player to ready up)
+const startHintDiv = document.createElement("div");
+Object.assign(startHintDiv.style, {
+  display: "none", width: "100%", fontSize: "12px",
+  color: "#666", marginTop: "4px", marginBottom: "4px",
+});
+startHintDiv.textContent = "Waiting for another player to Ready Up…";
+actionRow.appendChild(startHintDiv);
+
 // Host setting: per-round time limit (seconds; 0 disables)
 const timeLimitRow = document.createElement("div");
 Object.assign(timeLimitRow.style, {
@@ -1824,9 +1833,23 @@ function refreshStatusUI(snapshotGame) {
   if (snapshotGame && snapshotGame.status === 'lobby' && role === 'host') {
     startRoundBtn.style.display = 'inline-block';
     timeLimitRow.style.display = 'flex';
+
+    // Start-gate: enable only when host is effectively alone (solo) OR at least 2 players are ready.
+    // Non-ready players still get pulled into the round; this only controls when the host may start.
+    const lobbyPlayers = snapshotGame.players || {};
+    const readyCount = Object.keys(lobbyPlayers).filter(pid => lobbyPlayers[pid] && lobbyPlayers[pid].ready).length;
+    const nonGaveUpCount = Object.keys(lobbyPlayers).filter(pid => lobbyPlayers[pid] && !lobbyPlayers[pid].gaveUp).length;
+    const hostSolo = nonGaveUpCount <= 1; // host is the only active player
+    const canStart = hostSolo || readyCount >= 2;
+
+    startRoundBtn.disabled = !canStart;
+    startRoundBtn.style.opacity = canStart ? '1' : '0.5';
+    startRoundBtn.style.cursor = canStart ? 'pointer' : 'not-allowed';
+    startHintDiv.style.display = canStart ? 'none' : 'block';
   } else {
     startRoundBtn.style.display = 'none';
     timeLimitRow.style.display = 'none';
+    startHintDiv.style.display = 'none';
   }
 
   // Show "waiting for host" nudge to guests in the lobby
@@ -1927,8 +1950,9 @@ function renderPlayersList(playersObj, gameStatus, isHost = false) {
       row.appendChild(nameSpan);
       row.appendChild(kickBtn);
     } else {
-      // Add a Ready Up button to the player's OWN row in the lobby
-      if (gameStatus === 'lobby' && p.pid === playerId) {
+      // Add a Ready Up button to the player's OWN row in the lobby (guests only —
+      // the host is always auto-ready, so a toggle would just fight the auto-ready).
+      if (gameStatus === 'lobby' && p.pid === playerId && !isHost) {
         row.style.display = 'flex';
         row.style.alignItems = 'center';
         row.style.justifyContent = 'space-between';

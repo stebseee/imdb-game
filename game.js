@@ -486,6 +486,13 @@ async function processSnapshot(snapshot) {
   const playerIds = Object.keys(players);
   const currentPlayer = players[playerId];
 
+  // Host is always "ready" while in the lobby so the start-gate (needs 2 ready, or host solo)
+  // never locks the host out — including from round 2 onward, when startRound resets ready flags.
+  // Guarded on !ready so this doesn't loop (patch -> snapshot -> already ready -> no patch).
+  if (gameId && role === 'host' && snapshot.status === 'lobby' && currentPlayer && !currentPlayer.ready) {
+    dbPatch(`${gameId}/players/${playerId}`, { ready: true }).catch(() => {});
+  }
+
   // Detect being kicked: we have a gameId but our player record is gone.
   // Works in both lobby and active rounds — host can now kick mid-round.
   // _leavingGame guard prevents this firing when the player left voluntarily (including as host).
