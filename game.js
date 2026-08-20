@@ -119,10 +119,35 @@ async function startRound() {
   }
 }
 // ----------------------
+// Browser-tab title override — saves the page's real title on first override and
+// restores it on clear. Used for both the pre-round countdown and the lobby prompt,
+// so they never fight over document.title.
+function setTabTitle(text) {
+  if (_origDocTitle === null) _origDocTitle = document.title;
+  if (document.title !== text) document.title = text;
+}
+function clearTabTitle() {
+  if (_origDocTitle !== null) { document.title = _origDocTitle; _origDocTitle = null; }
+}
+
+// Lobby "players ready" nudge: while the game already qualifies to start (2+ ready) but
+// the host hasn't started yet, prompt not-yet-ready guests (via the tab title) to jump
+// back and Ready Up. Ready players and the host aren't nudged.
+function updateLobbyTabPrompt(snapshot) {
+  const players = snapshot.players || {};
+  const readyCount = Object.keys(players).filter(pid => players[pid] && players[pid].ready).length;
+  const meReady = !!(players[playerId] && players[playerId].ready);
+  const wantPrompt = snapshot.status === 'lobby' && readyCount >= 2 && !meReady && role !== 'host';
+  if (wantPrompt) setTabTitle('✅ Players ready — Ready Up to join!');
+  else clearTabTitle();
+}
+
+// ----------------------
 // Pre-round countdown UI (multiplayer). Shown on ALL clients while status === 'starting':
-// an on-page banner plus a ticking browser-tab title (visible even when the tab is in the
-// background). The host flips the game to 'active' when the countdown hits zero; a guest
-// fallback covers the case where the host vanished mid-countdown.
+// an on-page banner, a ticking browser-tab title (visible when the tab is backgrounded),
+// AND the modal's round-timer slot (so it lands where the round timer will appear — a
+// seamless hand-off). The host flips the game to 'active' when the countdown hits zero;
+// a guest fallback covers the case where the host vanished mid-countdown.
 function ensureCountdownBanner() {
   if (_countdownBanner && document.body && document.body.contains(_countdownBanner)) return _countdownBanner;
   const el = document.createElement('div');
@@ -141,15 +166,21 @@ function ensureCountdownBanner() {
 
 function startRoundCountdown(startAt) {
   if (_countdownTicker && _countdownStartAt === startAt) return; // already running for this round
-  stopRoundCountdown(false); // clear any prior ticker; keep saved title
+  stopRoundCountdown(); // clear any prior ticker/banner
   _countdownStartAt = startAt;
   _countdownFlipped = false;
-  if (_origDocTitle === null) _origDocTitle = document.title;
 
   const flipToActive = () => {
     if (_countdownFlipped || !gameId) return;
     _countdownFlipped = true;
     dbPatch(`${gameId}`, { status: 'active', startAt: null, startedAt: Date.now() }).catch(() => {});
+  };
+
+  const setModalTimer = (text) => {
+    if (typeof roundTimerDiv !== 'undefined' && roundTimerDiv) {
+      roundTimerDiv.style.display = 'block';
+      roundTimerDiv.textContent = text;
+    }
   };
 
   const tick = () => {
@@ -158,10 +189,12 @@ function startRoundCountdown(startAt) {
     const banner = ensureCountdownBanner();
     if (remainingMs > 0) {
       banner.textContent = `⏱️ Round starting in ${secs}s — Ready Up!`;
-      document.title = `(${secs}) ⏱️ Round starting… Ready Up!`;
+      setTabTitle(`(${secs}) ⏱️ Round starting… Ready Up!`);
+      setModalTimer(`🚦 Round starting in ${secs}…`);
     } else {
       banner.textContent = '🚦 Go!';
-      document.title = '🚦 Round starting…';
+      setTabTitle('🚦 Round starting…');
+      setModalTimer('🚦 Go!');
       // Host flips at zero; a guest only steps in if the host clearly didn't (3s grace).
       if (role === 'host') flipToActive();
       else if (remainingMs < -3000) flipToActive();
@@ -172,11 +205,12 @@ function startRoundCountdown(startAt) {
   _countdownTicker = setInterval(tick, 200);
 }
 
-function stopRoundCountdown(restoreTitle = true) {
+// Tears down the countdown ticker + on-page banner. Tab title is managed separately
+// (clearTabTitle / updateLobbyTabPrompt) so it survives a 'starting' -> 'active' hand-off.
+function stopRoundCountdown() {
   if (_countdownTicker) { clearInterval(_countdownTicker); _countdownTicker = null; }
   _countdownStartAt = null;
   if (_countdownBanner) { try { _countdownBanner.remove(); } catch (e) {} _countdownBanner = null; }
-  if (restoreTitle && _origDocTitle !== null) { document.title = _origDocTitle; _origDocTitle = null; }
 }
 
 async function createGameAndStart() {
@@ -347,7 +381,8 @@ async function giveUpGame() {
 
 async function leaveGame(shouldRestart = false) {
   _leavingGame = true;
-  stopRoundCountdown(); // tear down any pre-round countdown banner + restore the tab title
+  stopRoundCountdown(); // tear down any pre-round countdown banner/ticker
+  clearTabTitle();      // restore the browser-tab title (countdown or lobby prompt)
   if (!gameId) {
       // If we're forcing a restart, and not in a game, just execute the restart logic.
       if (shouldRestart) {
@@ -562,12 +597,13 @@ async function processSnapshot(snapshot) {
   renderPlayersList(snapshot.players || {}, snapshot.status, snapshot.hostId === playerId);
   renderChat(snapshot.chat || null);
 
-  // Pre-round countdown: run the banner + tab-title countdown while status === 'starting';
-  // tear it down (and restore the tab title) for any other status.
+  // Pre-round countdown while status === 'starting'; otherwise tear it down and let the
+  // lobby "players ready" tab prompt decide whether the tab title should nudge guests.
   if (snapshot.status === 'starting' && snapshot.startAt) {
     startRoundCountdown(Number(snapshot.startAt));
   } else {
     stopRoundCountdown();
+    updateLobbyTabPrompt(snapshot);
   }
 
   const players = snapshot.players || {};
@@ -586,6 +622,7 @@ async function processSnapshot(snapshot) {
   // _leavingGame guard prevents this firing when the player left voluntarily (including as host).
   if (gameId && role !== 'host' && !_leavingGame && (snapshot.status === 'lobby' || snapshot.status === 'active') && !currentPlayer) {
     stopPolling();
+    stopRoundCountdown(); clearTabTitle(); // clean up any countdown/lobby-prompt tab title
     const kickedGameId = gameId;
     gameId = null; actorPair = null; clicks = 0; role = null;
     hasRedirected = false; finished = false; clickPath = [];

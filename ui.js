@@ -1502,7 +1502,12 @@ function refreshStatusUI(snapshotGame) {
     // Stop the tick whenever the round isn't active
     if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
 
-    if (snapshotGame && snapshotGame.status === 'finished' && roundStartedAt) {
+    if (snapshotGame && snapshotGame.status === 'starting') {
+      // Pre-round countdown lives in the round-timer slot so it lands in the exact
+      // spot the round timer will occupy once the round goes active (seamless hand-off).
+      // The text is driven by the countdown ticker (startRoundCountdown in game.js).
+      roundTimerDiv.style.display = 'block';
+    } else if (snapshotGame && snapshotGame.status === 'finished' && roundStartedAt) {
       // Show the frozen final time on the leaderboard
       roundTimerDiv.style.display = 'block';
       const tl = Number(snapshotGame.roundTimeLimitMs);
