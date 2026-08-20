@@ -446,10 +446,13 @@ actionRow.appendChild(copybtn);
 // Host-only hint shown under Start Round when it's disabled (waiting for another player to ready up)
 const startHintDiv = document.createElement("div");
 Object.assign(startHintDiv.style, {
-  display: "none", width: "100%", fontSize: "12px",
-  color: "#666", marginTop: "4px", marginBottom: "4px",
+  display: "none", width: "100%", boxSizing: "border-box",
+  fontSize: "12px", fontWeight: "700", color: "#c0392b",
+  background: "rgba(192,57,43,0.10)", border: "1px solid rgba(192,57,43,0.35)",
+  borderRadius: "6px", padding: "6px 8px",
+  marginTop: "6px", marginBottom: "14px",
 });
-startHintDiv.textContent = "Waiting for another player to Ready Up…";
+startHintDiv.textContent = "⚠ Waiting for another player to Ready Up before you can start…";
 actionRow.appendChild(startHintDiv);
 
 // Host setting: per-round time limit (seconds; 0 disables)

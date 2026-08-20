@@ -83,12 +83,10 @@ async function startRound() {
   });
   await Promise.all(resets);
 
-  // NOW set the game to active — SSE fires after player records are already clean
-  await dbPatch(`${gameId}`, {
+  // Shared round payload. SSE fires after player records are already clean.
+  const roundPayload = {
     actorA: newActorPair[0],
     actorB: newActorPair[1],
-    startedAt: Date.now(),
-    status: "active",
     winner: null,
     winnerClicks: null,
     optimalPath: null,
@@ -96,10 +94,91 @@ async function startRound() {
     endedAt: null,
     endedBy: null,
     participants
-  });
+  };
 
-  console.log("Started new round with participants:", participantIds);
+  // Solo (host alone) starts immediately. Multiplayer gets a pre-round countdown so
+  // players who haven't readied up yet get a heads-up before the round begins. During
+  // 'starting' we leave startedAt null so no one redirects until the countdown flips
+  // the game to 'active' (handled by the countdown ticker in processSnapshot).
+  if (participantIds.length > 1) {
+    await dbPatch(`${gameId}`, {
+      ...roundPayload,
+      status: "starting",
+      startAt: Date.now() + ROUND_COUNTDOWN_MS,
+      startedAt: null
+    });
+    console.log("Round countdown started for participants:", participantIds);
+  } else {
+    await dbPatch(`${gameId}`, {
+      ...roundPayload,
+      status: "active",
+      startAt: null,
+      startedAt: Date.now()
+    });
+    console.log("Started new round (solo) with participants:", participantIds);
+  }
 }
+// ----------------------
+// Pre-round countdown UI (multiplayer). Shown on ALL clients while status === 'starting':
+// an on-page banner plus a ticking browser-tab title (visible even when the tab is in the
+// background). The host flips the game to 'active' when the countdown hits zero; a guest
+// fallback covers the case where the host vanished mid-countdown.
+function ensureCountdownBanner() {
+  if (_countdownBanner && document.body && document.body.contains(_countdownBanner)) return _countdownBanner;
+  const el = document.createElement('div');
+  el.id = 'imdb-race-countdown';
+  Object.assign(el.style, {
+    position: 'fixed', top: '16px', left: '50%', transform: 'translateX(-50%)',
+    zIndex: '2147483647', background: '#111', color: '#f5c518',
+    fontSize: '18px', fontWeight: '800', padding: '10px 18px', borderRadius: '10px',
+    boxShadow: '0 4px 18px rgba(0,0,0,0.45)', fontFamily: 'system-ui, sans-serif',
+    pointerEvents: 'none', textAlign: 'center', whiteSpace: 'nowrap',
+  });
+  if (document.body) document.body.appendChild(el);
+  _countdownBanner = el;
+  return el;
+}
+
+function startRoundCountdown(startAt) {
+  if (_countdownTicker && _countdownStartAt === startAt) return; // already running for this round
+  stopRoundCountdown(false); // clear any prior ticker; keep saved title
+  _countdownStartAt = startAt;
+  _countdownFlipped = false;
+  if (_origDocTitle === null) _origDocTitle = document.title;
+
+  const flipToActive = () => {
+    if (_countdownFlipped || !gameId) return;
+    _countdownFlipped = true;
+    dbPatch(`${gameId}`, { status: 'active', startAt: null, startedAt: Date.now() }).catch(() => {});
+  };
+
+  const tick = () => {
+    const remainingMs = startAt - Date.now();
+    const secs = Math.max(0, Math.ceil(remainingMs / 1000));
+    const banner = ensureCountdownBanner();
+    if (remainingMs > 0) {
+      banner.textContent = `⏱️ Round starting in ${secs}s — Ready Up!`;
+      document.title = `(${secs}) ⏱️ Round starting… Ready Up!`;
+    } else {
+      banner.textContent = '🚦 Go!';
+      document.title = '🚦 Round starting…';
+      // Host flips at zero; a guest only steps in if the host clearly didn't (3s grace).
+      if (role === 'host') flipToActive();
+      else if (remainingMs < -3000) flipToActive();
+    }
+  };
+
+  tick();
+  _countdownTicker = setInterval(tick, 200);
+}
+
+function stopRoundCountdown(restoreTitle = true) {
+  if (_countdownTicker) { clearInterval(_countdownTicker); _countdownTicker = null; }
+  _countdownStartAt = null;
+  if (_countdownBanner) { try { _countdownBanner.remove(); } catch (e) {} _countdownBanner = null; }
+  if (restoreTitle && _origDocTitle !== null) { document.title = _origDocTitle; _origDocTitle = null; }
+}
+
 async function createGameAndStart() {
   cleanupOldGames(); // fire-and-forget; don't await so it doesn't delay game creation
   const id = randId(5);
@@ -268,6 +347,7 @@ async function giveUpGame() {
 
 async function leaveGame(shouldRestart = false) {
   _leavingGame = true;
+  stopRoundCountdown(); // tear down any pre-round countdown banner + restore the tab title
   if (!gameId) {
       // If we're forcing a restart, and not in a game, just execute the restart logic.
       if (shouldRestart) {
@@ -481,6 +561,14 @@ async function processSnapshot(snapshot) {
   refreshStatusUI(snapshot);
   renderPlayersList(snapshot.players || {}, snapshot.status, snapshot.hostId === playerId);
   renderChat(snapshot.chat || null);
+
+  // Pre-round countdown: run the banner + tab-title countdown while status === 'starting';
+  // tear it down (and restore the tab title) for any other status.
+  if (snapshot.status === 'starting' && snapshot.startAt) {
+    startRoundCountdown(Number(snapshot.startAt));
+  } else {
+    stopRoundCountdown();
+  }
 
   const players = snapshot.players || {};
   const playerIds = Object.keys(players);

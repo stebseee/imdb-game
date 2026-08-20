@@ -41,6 +41,12 @@ let optimalPathResult = null;   // null | 'loading' | { path, actorClicks, oracl
 let roundIsActive = false;      // true only while a game round is status='active'; gates page filters
 let hostRoundTimeLimitSec = 300; // host-configured per-round limit (seconds; presets only)
 let roundTimeLimitMs = null;   // round-configured for the currently active round
+const ROUND_COUNTDOWN_MS = 10000; // pre-round countdown (multiplayer starts) before the round goes active
+let _countdownTicker = null;   // setInterval handle for the pre-round countdown UI
+let _countdownStartAt = null;  // startAt (ms) the current countdown is running toward
+let _countdownFlipped = false; // guards the single status->active write when the countdown ends
+let _countdownBanner = null;   // on-page countdown banner element
+let _origDocTitle = null;      // saved page title, restored when the countdown ends
 let _chatMinimised = true;     // chat panel collapse state (starts minimised)
 let _chatUnread = 0;           // unread count — messages from others not yet seen
 let _chatLastKeys = '';        // serialised key list — avoids redundant re-renders
