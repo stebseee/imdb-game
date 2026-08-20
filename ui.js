@@ -1919,89 +1919,80 @@ function renderPlayersList(playersObj, gameStatus, isHost = false) {
     const row = document.createElement("div");
     row.style.padding = "4px 0";
     row.style.fontSize = "13px";
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.justifyContent = 'space-between';
     const label = p.pid === playerId ? `${escapeHtml(p.name || p.pid)} (You)` : escapeHtml(p.name || p.pid);
 
+    // Name text. Readiness is NOT shown as text — it's conveyed by the green READY
+    // button/badge on the right. Clicks/finish/give-up only apply once a round is under way.
     let statusLabel = "";
     if (p.finishedAt) {
       const base = roundStartedAt;
       const dur = (base && p.finishedAt) ? formatDuration(p.finishedAt - base) : '';
       statusLabel = ` — ${p.clicks} clicks — finished${dur ? ` — ${dur}` : ''} ✅`;
     } else if (p.gaveUp) {
-      // include gaveUpAt if present
       const gaveUpAt = p.gaveUpAt ? ` (${new Date(Number(p.gaveUpAt)).toLocaleTimeString()})` : '';
       statusLabel = ` — GAVE UP${gaveUpAt} 🏳️`;
       row.style.opacity = '0.6';
-    } else if (p.ready && gameStatus === 'lobby') {
-      // READY is a lobby-only concept. During an active/finished round we must show
-      // clicks instead — otherwise a ready flag left over from the lobby masks a
-      // player's live click count (e.g. the host showing "READY" instead of clicks).
-      statusLabel = " — READY ⏱️";
-      row.style.fontWeight = '600';
-    } else if (typeof p.clicks !== 'undefined') {
+    } else if (typeof p.clicks !== 'undefined' && gameStatus !== 'lobby') {
       statusLabel = ` — ${p.clicks} clicks`;
     }
 
-    // Host kick button — shown in lobby and during active rounds, for non-self players
-    if ((gameStatus === 'lobby' || gameStatus === 'active') && isHost && p.pid !== playerId) {
-      row.style.display = 'flex';
-      row.style.alignItems = 'center';
-      row.style.justifyContent = 'space-between';
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = label + statusLabel;
-      const kickBtn = document.createElement('button');
-      kickBtn.textContent = 'Kick';
-      kickBtn.title = `Kick ${p.name || p.pid}`;
-      Object.assign(kickBtn.style, {
-        marginLeft: '8px', background: '#c0392b', border: 'none',
-        color: '#fff', cursor: 'pointer', fontSize: '11px',
-        fontWeight: 'bold', padding: '2px 7px', borderRadius: '3px',
-        flexShrink: '0', lineHeight: '1.4'
-      });
-      kickBtn.addEventListener('click', () => kickPlayer(p.pid));
-      row.appendChild(nameSpan);
-      row.appendChild(kickBtn);
-    } else {
-      // Add a Ready Up button to the player's OWN row in the lobby (guests only —
-      // the host is always auto-ready, so a toggle would just fight the auto-ready).
-      if (gameStatus === 'lobby' && p.pid === playerId && !isHost) {
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.justifyContent = 'space-between';
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = label + statusLabel;
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = label + statusLabel;
 
-        // Toggles this player's own ready flag
+    // Right-side controls: ready indicator (lobby) + host kick button.
+    const controls = document.createElement('div');
+    Object.assign(controls.style, { display: 'flex', alignItems: 'center', gap: '6px', flexShrink: '0' });
+
+    // Ready indicator (lobby only). Your own guest row is an interactive toggle; everyone
+    // else who is ready (including the always-ready host) shows a static green READY badge —
+    // so ready state looks consistent across all players.
+    if (gameStatus === 'lobby') {
+      const isSelfGuest = (p.pid === playerId && !isHost);
+      if (isSelfGuest) {
         const readyBtn = document.createElement('button');
         readyBtn.textContent = p.ready ? 'READY' : 'Ready Up';
-        readyBtn.title = `Mark as ready`;
+        readyBtn.title = 'Toggle your ready state';
         Object.assign(readyBtn.style, {
-          marginLeft: '8px', 
-          background: p.ready ? '#27ae60' : '#3498db', 
-          border: 'none',
-          color: '#fff', 
-          cursor: 'pointer', 
-          fontSize: '11px',
-          fontWeight: 'bold', 
-          padding: '2px 7px', 
-          borderRadius: '3px',
-          flexShrink: '0', 
-          lineHeight: '1.4'
+          background: p.ready ? '#27ae60' : '#3498db', border: 'none', color: '#fff',
+          cursor: 'pointer', fontSize: '11px', fontWeight: 'bold',
+          padding: '2px 8px', borderRadius: '3px', lineHeight: '1.4',
         });
-        
-        // Add click handler for ready button
         readyBtn.addEventListener('click', () => {
-          // Update ready status in Firebase
           dbPatch(`${gameId}/players/${p.pid}`, { ready: !p.ready }).catch(err => {
             console.error("Failed to update ready status:", err);
           });
         });
-        
-        row.appendChild(nameSpan);
-        row.appendChild(readyBtn);
-      } else {
-        row.innerHTML = label + statusLabel;
+        controls.appendChild(readyBtn);
+      } else if (p.ready) {
+        const badge = document.createElement('span');
+        badge.textContent = 'READY';
+        Object.assign(badge.style, {
+          background: '#27ae60', color: '#fff', fontSize: '11px', fontWeight: 'bold',
+          padding: '2px 8px', borderRadius: '3px', lineHeight: '1.4',
+        });
+        controls.appendChild(badge);
       }
     }
+
+    // Host kick button — shown in lobby and during active rounds, for non-self players.
+    if ((gameStatus === 'lobby' || gameStatus === 'active') && isHost && p.pid !== playerId) {
+      const kickBtn = document.createElement('button');
+      kickBtn.textContent = 'Kick';
+      kickBtn.title = `Kick ${p.name || p.pid}`;
+      Object.assign(kickBtn.style, {
+        background: '#c0392b', border: 'none', color: '#fff', cursor: 'pointer',
+        fontSize: '11px', fontWeight: 'bold', padding: '2px 7px', borderRadius: '3px',
+        lineHeight: '1.4',
+      });
+      kickBtn.addEventListener('click', () => kickPlayer(p.pid));
+      controls.appendChild(kickBtn);
+    }
+
+    row.appendChild(nameSpan);
+    row.appendChild(controls);
     playersList.appendChild(row);
   }
 }
