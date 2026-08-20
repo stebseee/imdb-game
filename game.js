@@ -179,6 +179,8 @@ function startRoundCountdown(startAt) {
   const setModalTimer = (text) => {
     if (typeof roundTimerDiv !== 'undefined' && roundTimerDiv) {
       roundTimerDiv.style.display = 'block';
+      roundTimerDiv.style.color = '#e74c3c'; // red for urgency during the countdown
+      roundTimerDiv.style.fontWeight = '800';
       roundTimerDiv.textContent = text;
     }
   };
@@ -211,6 +213,11 @@ function stopRoundCountdown() {
   if (_countdownTicker) { clearInterval(_countdownTicker); _countdownTicker = null; }
   _countdownStartAt = null;
   if (_countdownBanner) { try { _countdownBanner.remove(); } catch (e) {} _countdownBanner = null; }
+  // Reset the round-timer slot's countdown styling so the actual round timer renders normally.
+  if (typeof roundTimerDiv !== 'undefined' && roundTimerDiv) {
+    roundTimerDiv.style.color = '';
+    roundTimerDiv.style.fontWeight = '';
+  }
 }
 
 async function createGameAndStart() {

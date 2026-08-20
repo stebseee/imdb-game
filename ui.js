@@ -1931,7 +1931,10 @@ function renderPlayersList(playersObj, gameStatus, isHost = false) {
       const gaveUpAt = p.gaveUpAt ? ` (${new Date(Number(p.gaveUpAt)).toLocaleTimeString()})` : '';
       statusLabel = ` — GAVE UP${gaveUpAt} 🏳️`;
       row.style.opacity = '0.6';
-    } else if (p.ready) {
+    } else if (p.ready && gameStatus === 'lobby') {
+      // READY is a lobby-only concept. During an active/finished round we must show
+      // clicks instead — otherwise a ready flag left over from the lobby masks a
+      // player's live click count (e.g. the host showing "READY" instead of clicks).
       statusLabel = " — READY ⏱️";
       row.style.fontWeight = '600';
     } else if (typeof p.clicks !== 'undefined') {
