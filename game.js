@@ -190,11 +190,11 @@ function startRoundCountdown(startAt) {
     if (remainingMs > 0) {
       banner.textContent = `⏱️ Round starting in ${secs}s — Ready Up!`;
       setTabTitle(`(${secs}) ⏱️ Round starting… Ready Up!`);
-      setModalTimer(`🚦 Round starting in ${secs}…`);
+      setModalTimer(`Round starting in ${secs}…`);
     } else {
-      banner.textContent = '🚦 Go!';
-      setTabTitle('🚦 Round starting…');
-      setModalTimer('🚦 Go!');
+      banner.textContent = 'Go!';
+      setTabTitle('Round starting…');
+      setModalTimer('Go!');
       // Host flips at zero; a guest only steps in if the host clearly didn't (3s grace).
       if (role === 'host') flipToActive();
       else if (remainingMs < -3000) flipToActive();
@@ -615,6 +615,15 @@ async function processSnapshot(snapshot) {
   // Guarded on !ready so this doesn't loop (patch -> snapshot -> already ready -> no patch).
   if (gameId && role === 'host' && snapshot.status === 'lobby' && currentPlayer && !currentPlayer.ready) {
     dbPatch(`${gameId}/players/${playerId}`, { ready: true }).catch(() => {});
+  }
+
+  // Back in the lobby, clear this player's own stale give-up flag from the previous round so a
+  // give-up behaves exactly like a normal completion: they become a clean, un-ready lobby member
+  // (must Ready Up again) instead of lingering as "GAVE UP" — which also stops the host being
+  // wrongly counted as "solo" (gaveUp players are excluded from the active roster) and starting
+  // without them. Guarded on gaveUp so this doesn't loop.
+  if (gameId && snapshot.status === 'lobby' && currentPlayer && currentPlayer.gaveUp && !_leavingGame) {
+    dbPatch(`${gameId}/players/${playerId}`, { gaveUp: false, gaveUpAt: null, clicks: 0 }).catch(() => {});
   }
 
   // Detect being kicked: we have a gameId but our player record is gone.
