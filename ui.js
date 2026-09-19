@@ -221,6 +221,31 @@ Object.assign(nameEditHint.style, {
 });
 nameDisplay.appendChild(nameEditHint);
 
+// Persistent career W/L line (cross-session; populated from /players — see stats.js).
+// Sibling of nameDisplay so it stays visible in both view and edit mode.
+const careerLine = document.createElement("div");
+careerLine.id = "careerLine";
+Object.assign(careerLine.style, {
+  fontSize: "12px",
+  opacity: "0.85",
+  marginTop: "4px",
+});
+nameRow.appendChild(careerLine);
+
+// Render the persistent career line. Pass the /players/{id} stats object, or
+// null/undefined to show the "no games yet" state.
+function renderCareerStats(stats) {
+  const wins   = Number(stats?.totalWins   ?? 0);
+  const rounds = Number(stats?.totalRounds ?? 0);
+  if (!rounds) {
+    careerLine.textContent = "Career: no games yet";
+    return;
+  }
+  const losses = Math.max(0, rounds - wins);
+  const pct = Math.round((wins / rounds) * 100);
+  careerLine.textContent = `Career: ${wins}W / ${losses}L · ${pct}%`;
+}
+
 // Edit mode: text input
 const nameInput = document.createElement("input");
 nameInput.id = "nameInput";
