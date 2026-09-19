@@ -690,6 +690,14 @@ async function processSnapshot(snapshot) {
         console.log(`Round ended by timeout with no finishers (Round ${roundNum})`);
       }
 
+      // Persist this round into cross-session career stats. This concluding
+      // client writes every participant's /players node (see stats.js).
+      const statNameOf = {};
+      for (const pid of playerIds) statNameOf[pid] = players[pid]?.name || `Player-${pid}`;
+      await recordRoundStats({ participantPids: playerIds, winnerPid, nameOf: statNameOf });
+      // Refresh my own career line from the freshly-written totals.
+      if (playerIds.includes(playerId)) loadMyStats().then(renderCareerStats).catch(() => {});
+
       // Fetch the optimal path once (this client only) and write to Firebase
       // so all clients show the same result
       const actorAName = snapshot.actorA?.name;
@@ -966,6 +974,7 @@ nameSaveBtn.addEventListener("click", async () => {
   displayName = (nameInput.value || "").trim() || displayName || `Player-${playerId}`;
   await storageSet({ displayName });
   setNameEditMode(false); // flip back to view mode
+  touchMyStats(); // keep the persistent /players node's name in sync
   if (gameId) {
     try {
       // Also update the name on the server, ensuring gaveUp status is preserved or defaulted

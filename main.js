@@ -43,6 +43,11 @@
     setNameEditMode(!displayName);
     if (!displayName) displayName = `Player-${playerId}`;
 
+    // Load persistent career stats (survives across sessions) and render them.
+    // touchMyStats() also seeds/refreshes this player's /players node.
+    loadMyStats().then(renderCareerStats).catch(() => {});
+    touchMyStats();
+
     if (stored.role) role = stored.role;
     if (stored.hasRedirected) hasRedirected = stored.hasRedirected;
     if (stored.finished) finished = stored.finished;
