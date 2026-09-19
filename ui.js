@@ -443,18 +443,6 @@ startRoundBtn.className = "blue-button";
 actionRow.appendChild(startRoundBtn);
 actionRow.appendChild(copybtn);
 
-// Host-only hint shown under Start Round when it's disabled (waiting for another player to ready up)
-const startHintDiv = document.createElement("div");
-Object.assign(startHintDiv.style, {
-  display: "none", width: "100%", boxSizing: "border-box",
-  fontSize: "12px", fontWeight: "700", color: "#c0392b",
-  background: "rgba(192,57,43,0.10)", border: "1px solid rgba(192,57,43,0.35)",
-  borderRadius: "6px", padding: "6px 8px",
-  marginTop: "6px", marginBottom: "14px",
-});
-startHintDiv.textContent = "⚠ Waiting for another player to Ready Up before you can start…";
-actionRow.appendChild(startHintDiv);
-
 // Host setting: per-round time limit (seconds; 0 disables)
 const timeLimitRow = document.createElement("div");
 Object.assign(timeLimitRow.style, {
@@ -1502,12 +1490,7 @@ function refreshStatusUI(snapshotGame) {
     // Stop the tick whenever the round isn't active
     if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
 
-    if (snapshotGame && snapshotGame.status === 'starting') {
-      // Pre-round countdown lives in the round-timer slot so it lands in the exact
-      // spot the round timer will occupy once the round goes active (seamless hand-off).
-      // The text is driven by the countdown ticker (startRoundCountdown in game.js).
-      roundTimerDiv.style.display = 'block';
-    } else if (snapshotGame && snapshotGame.status === 'finished' && roundStartedAt) {
+    if (snapshotGame && snapshotGame.status === 'finished' && roundStartedAt) {
       // Show the frozen final time on the leaderboard
       roundTimerDiv.style.display = 'block';
       const tl = Number(snapshotGame.roundTimeLimitMs);
@@ -1841,23 +1824,9 @@ function refreshStatusUI(snapshotGame) {
   if (snapshotGame && snapshotGame.status === 'lobby' && role === 'host') {
     startRoundBtn.style.display = 'inline-block';
     timeLimitRow.style.display = 'flex';
-
-    // Start-gate: enable only when host is effectively alone (solo) OR at least 2 players are ready.
-    // Non-ready players still get pulled into the round; this only controls when the host may start.
-    const lobbyPlayers = snapshotGame.players || {};
-    const readyCount = Object.keys(lobbyPlayers).filter(pid => lobbyPlayers[pid] && lobbyPlayers[pid].ready).length;
-    const nonGaveUpCount = Object.keys(lobbyPlayers).filter(pid => lobbyPlayers[pid] && !lobbyPlayers[pid].gaveUp).length;
-    const hostSolo = nonGaveUpCount <= 1; // host is the only active player
-    const canStart = hostSolo || readyCount >= 2;
-
-    startRoundBtn.disabled = !canStart;
-    startRoundBtn.style.opacity = canStart ? '1' : '0.5';
-    startRoundBtn.style.cursor = canStart ? 'pointer' : 'not-allowed';
-    startHintDiv.style.display = canStart ? 'none' : 'block';
   } else {
     startRoundBtn.style.display = 'none';
     timeLimitRow.style.display = 'none';
-    startHintDiv.style.display = 'none';
   }
 
   // Show "waiting for host" nudge to guests in the lobby
@@ -1919,80 +1888,47 @@ function renderPlayersList(playersObj, gameStatus, isHost = false) {
     const row = document.createElement("div");
     row.style.padding = "4px 0";
     row.style.fontSize = "13px";
-    row.style.display = 'flex';
-    row.style.alignItems = 'center';
-    row.style.justifyContent = 'space-between';
     const label = p.pid === playerId ? `${escapeHtml(p.name || p.pid)} (You)` : escapeHtml(p.name || p.pid);
 
-    // Name text. Readiness is NOT shown as text — it's conveyed by the green READY
-    // button/badge on the right. Clicks/finish/give-up only apply once a round is under way.
     let statusLabel = "";
     if (p.finishedAt) {
       const base = roundStartedAt;
       const dur = (base && p.finishedAt) ? formatDuration(p.finishedAt - base) : '';
       statusLabel = ` — ${p.clicks} clicks — finished${dur ? ` — ${dur}` : ''} ✅`;
     } else if (p.gaveUp) {
+      // include gaveUpAt if present
       const gaveUpAt = p.gaveUpAt ? ` (${new Date(Number(p.gaveUpAt)).toLocaleTimeString()})` : '';
       statusLabel = ` — GAVE UP${gaveUpAt} 🏳️`;
       row.style.opacity = '0.6';
-    } else if (typeof p.clicks !== 'undefined' && gameStatus !== 'lobby') {
+    } else if (p.ready) {
+      statusLabel = " — READY ⏱️";
+      row.style.fontWeight = '600';
+    } else if (typeof p.clicks !== 'undefined') {
       statusLabel = ` — ${p.clicks} clicks`;
     }
 
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = label + statusLabel;
-
-    // Right-side controls: ready indicator (lobby) + host kick button.
-    const controls = document.createElement('div');
-    Object.assign(controls.style, { display: 'flex', alignItems: 'center', gap: '6px', flexShrink: '0' });
-
-    // Ready indicator (lobby only). Your own guest row is an interactive toggle; everyone
-    // else who is ready (including the always-ready host) shows a static green READY badge —
-    // so ready state looks consistent across all players.
-    if (gameStatus === 'lobby') {
-      const isSelfGuest = (p.pid === playerId && !isHost);
-      if (isSelfGuest) {
-        const readyBtn = document.createElement('button');
-        readyBtn.textContent = p.ready ? 'READY' : 'Ready Up';
-        readyBtn.title = 'Toggle your ready state';
-        Object.assign(readyBtn.style, {
-          background: p.ready ? '#27ae60' : '#3498db', border: 'none', color: '#fff',
-          cursor: 'pointer', fontSize: '11px', fontWeight: 'bold',
-          padding: '2px 8px', borderRadius: '3px', lineHeight: '1.4',
-        });
-        readyBtn.addEventListener('click', () => {
-          dbPatch(`${gameId}/players/${p.pid}`, { ready: !p.ready }).catch(err => {
-            console.error("Failed to update ready status:", err);
-          });
-        });
-        controls.appendChild(readyBtn);
-      } else if (p.ready) {
-        const badge = document.createElement('span');
-        badge.textContent = 'READY';
-        Object.assign(badge.style, {
-          background: '#27ae60', color: '#fff', fontSize: '11px', fontWeight: 'bold',
-          padding: '2px 8px', borderRadius: '3px', lineHeight: '1.4',
-        });
-        controls.appendChild(badge);
-      }
-    }
-
-    // Host kick button — shown in lobby and during active rounds, for non-self players.
+    // Host kick button — shown in lobby and during active rounds, for non-self players
     if ((gameStatus === 'lobby' || gameStatus === 'active') && isHost && p.pid !== playerId) {
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.justifyContent = 'space-between';
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = label + statusLabel;
       const kickBtn = document.createElement('button');
       kickBtn.textContent = 'Kick';
       kickBtn.title = `Kick ${p.name || p.pid}`;
       Object.assign(kickBtn.style, {
-        background: '#c0392b', border: 'none', color: '#fff', cursor: 'pointer',
-        fontSize: '11px', fontWeight: 'bold', padding: '2px 7px', borderRadius: '3px',
-        lineHeight: '1.4',
+        marginLeft: '8px', background: '#c0392b', border: 'none',
+        color: '#fff', cursor: 'pointer', fontSize: '11px',
+        fontWeight: 'bold', padding: '2px 7px', borderRadius: '3px',
+        flexShrink: '0', lineHeight: '1.4'
       });
       kickBtn.addEventListener('click', () => kickPlayer(p.pid));
-      controls.appendChild(kickBtn);
+      row.appendChild(nameSpan);
+      row.appendChild(kickBtn);
+    } else {
+      row.innerHTML = label + statusLabel;
     }
-
-    row.appendChild(nameSpan);
-    row.appendChild(controls);
     playersList.appendChild(row);
   }
 }
