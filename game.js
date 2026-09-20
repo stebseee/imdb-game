@@ -479,8 +479,13 @@ async function processSnapshot(snapshot) {
   if (snapshot.hostId && gameId) {
     const newRole = snapshot.hostId === playerId ? 'host' : 'guest';
     if (newRole !== role) {
+      const promotedToHost = newRole === 'host' && role !== 'host'; // transfer promoted us
       role = newRole;
       await storageSet({ role });
+      if (promotedToHost && !_leavingGame) {
+        updateGameControls();
+        alert("You're now the host — the previous host left the game.");
+      }
     }
   }
 
@@ -491,17 +496,6 @@ async function processSnapshot(snapshot) {
   const players = snapshot.players || {};
   const playerIds = Object.keys(players);
   const currentPlayer = players[playerId];
-
-  // --- Promotion to host ---
-  // When the previous host leaves/disconnects, transferHost() sets hostId to us.
-  // Sync our local role (host-only actions elsewhere check role) and tell the
-  // player once. Never fires on create/join since role is already correct there.
-  if (gameId && !_leavingGame && snapshot.hostId === playerId && role !== 'host') {
-    role = 'host';
-    await storageSet({ role });
-    updateGameControls();
-    alert("You're now the host — the previous host left the game.");
-  }
 
   // --- Career stats: record each round exactly once ---
   // Driven by OBSERVING the finished state, not by the conclude race (which any
