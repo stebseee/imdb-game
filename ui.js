@@ -1058,6 +1058,47 @@ _settingsTimeNote.textContent = "Applies to rounds you host.";
 Object.assign(_settingsTimeNote.style, { fontSize: "11px", color: "#5a4a00", marginTop: "4px" });
 _settingsModal.body.appendChild(_settingsTimeNote);
 
+// Game mode (win rule) selector — host-set, fixed per round like the time limit.
+const gameModeRow = document.createElement("div");
+Object.assign(gameModeRow.style, {
+  display: "flex", width: "100%", marginTop: "16px", marginBottom: "4px",
+  flexDirection: "column", alignItems: "flex-start", gap: "6px",
+  padding: "6px 8px", borderRadius: "8px", background: "rgba(255,255,255,0.12)", boxSizing: "border-box",
+});
+const gameModeLabel = document.createElement("div");
+gameModeLabel.textContent = "Win rule";
+Object.assign(gameModeLabel.style, { fontSize: "13px", fontWeight: "800", color: "#000" });
+gameModeRow.appendChild(gameModeLabel);
+const gameModeHelper = document.createElement("div");
+gameModeHelper.textContent = "How the round winner is decided.";
+Object.assign(gameModeHelper.style, { fontSize: "11px", opacity: "0.75", color: "#000" });
+gameModeRow.appendChild(gameModeHelper);
+const gameModeSelect = document.createElement("select");
+Object.assign(gameModeSelect.style, {
+  width: "100%", maxWidth: "220px", padding: "8px 10px", fontSize: "13px",
+  borderRadius: "10px", border: "1px solid rgba(0,0,0,0.25)", outline: "none",
+  background: "rgba(255,255,255,0.88)", color: "#000",
+});
+const gameModeOpts = { fewest: "Fewest clicks wins", fastest: "Fastest to finish wins" };
+Object.keys(gameModeOpts).forEach(m => {
+  const opt = document.createElement("option");
+  opt.value = m; opt.textContent = gameModeOpts[m];
+  gameModeSelect.appendChild(opt);
+});
+gameModeSelect.value = (gameMode === 'fastest') ? 'fastest' : 'fewest';
+gameModeRow.appendChild(gameModeSelect);
+gameModeSelect.addEventListener("change", async () => {
+  gameMode = (gameModeSelect.value === 'fastest') ? 'fastest' : 'fewest';
+  gameModeSelect.value = gameMode;
+  await storageSet({ gameMode });
+});
+_settingsModal.body.appendChild(gameModeRow);
+
+const _settingsModeNote = document.createElement("div");
+_settingsModeNote.textContent = "Applies to rounds you host.";
+Object.assign(_settingsModeNote.style, { fontSize: "11px", color: "#5a4a00", marginTop: "4px" });
+_settingsModal.body.appendChild(_settingsModeNote);
+
 // (Debug panel stays a hidden secret — Shift+click the header. No visible entry.)
 
 function openSettingsModal() { _settingsModal.open(); }
@@ -1899,14 +1940,19 @@ function refreshStatusUI(snapshotGame) {
     const allPlayers = Object.keys(players).map(pid => ({ pid, ...players[pid] }));
 
     // finished players: sort by clicks then finishedAt (earliest first)
+    // Leaderboard order follows the win rule: 'fastest' → by finish time; else
+    // (fewest) → by clicks, tie-broken by finish time. This also feeds the
+    // fallback winner (finishedPlayers[0]) when no server winner is set.
+    const isFastest = snapshotGame.gameMode === 'fastest';
     const finishedPlayers = allPlayers
       .filter(p => p.finishedAt && !p.gaveUp)
       .sort((a, b) => {
+        const af = Number(a.finishedAt ?? Infinity);
+        const bf = Number(b.finishedAt ?? Infinity);
+        if (isFastest) return af - bf;
         const ac = Number(a.clicks ?? Infinity);
         const bc = Number(b.clicks ?? Infinity);
         if (ac !== bc) return ac - bc;
-        const af = Number(a.finishedAt ?? Infinity);
-        const bf = Number(b.finishedAt ?? Infinity);
         return af - bf;
       });
 
