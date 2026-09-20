@@ -226,9 +226,13 @@ nameDisplay.appendChild(nameEditHint);
 const careerLine = document.createElement("div");
 careerLine.id = "careerLine";
 Object.assign(careerLine.style, {
+  display: "block",
   fontSize: "12px",
   opacity: "0.85",
-  marginTop: "4px",
+  marginTop: "10px",
+  paddingTop: "8px",
+  borderTop: "1px solid rgba(0, 0, 0, 0.1)",
+  lineHeight: "1.3",
 });
 nameRow.appendChild(careerLine);
 
