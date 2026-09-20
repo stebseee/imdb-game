@@ -486,6 +486,29 @@ async function processSnapshot(snapshot) {
   const playerIds = Object.keys(players);
   const currentPlayer = players[playerId];
 
+  // --- Career stats: record each round exactly once ---
+  // Driven by OBSERVING the finished state, not by the conclude race (which any
+  // client can win, so recording there double-counts). Only the host writes, so
+  // there's a single writer regardless of who concluded. _statsWitnessedActive
+  // stops a page loaded straight into a finished round from re-counting it.
+  if (snapshot.status === 'active') {
+    _statsWitnessedActive = true;
+  } else if (snapshot.status === 'finished' && snapshot.endedAt) {
+    const statsEndedAt = snapshot.endedAt;
+    if (role === 'host' && _statsWitnessedActive && statsEndedAt !== _statsRecordedEndedAt) {
+      _statsRecordedEndedAt = statsEndedAt;
+      const nameOf = {};
+      for (const pid of playerIds) nameOf[pid] = players[pid]?.name || `Player-${pid}`;
+      recordRoundStats({ participantPids: playerIds, winnerPid: snapshot.winner || null, nameOf });
+    }
+    _statsWitnessedActive = false;
+    // Every client refreshes its own career line once per finished round.
+    if (statsEndedAt !== _statsRefreshedEndedAt) {
+      _statsRefreshedEndedAt = statsEndedAt;
+      if (playerIds.includes(playerId)) loadMyStats().then(renderCareerStats).catch(() => {});
+    }
+  }
+
   // Detect being kicked: we have a gameId but our player record is gone.
   // Works in both lobby and active rounds — host can now kick mid-round.
   // _leavingGame guard prevents this firing when the player left voluntarily (including as host).
@@ -690,13 +713,9 @@ async function processSnapshot(snapshot) {
         console.log(`Round ended by timeout with no finishers (Round ${roundNum})`);
       }
 
-      // Persist this round into cross-session career stats. This concluding
-      // client writes every participant's /players node (see stats.js).
-      const statNameOf = {};
-      for (const pid of playerIds) statNameOf[pid] = players[pid]?.name || `Player-${pid}`;
-      await recordRoundStats({ participantPids: playerIds, winnerPid, nameOf: statNameOf });
-      // Refresh my own career line from the freshly-written totals.
-      if (playerIds.includes(playerId)) loadMyStats().then(renderCareerStats).catch(() => {});
+      // Career stats are NOT recorded here — any client can reach this block, so
+      // recording here double-counts. Recording happens once, host-only, when the
+      // finished state is OBSERVED (see the stats block near the top of this fn).
 
       // Fetch the optimal path once (this client only) and write to Firebase
       // so all clients show the same result
