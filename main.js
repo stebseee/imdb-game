@@ -117,7 +117,23 @@
       }
     }
 
-    if (stored.gameId) {
+    // Share-link auto-join: an ?game=CODE link (e.g. imdb.com/?game=ABCDE) joins
+    // that game on load. Strip the param immediately so a refresh can't re-join and
+    // it can't interfere with finish-detection URL checks.
+    let _joinedFromLink = false;
+    try {
+      const urlCode = (new URLSearchParams(window.location.search).get('game') || '').trim().toUpperCase();
+      if (urlCode) {
+        try { const u = new URL(window.location.href); u.searchParams.delete('game'); history.replaceState(null, '', u.toString()); } catch (e) {}
+        // Only join if it's a different game than the one we're already in.
+        if (urlCode !== (stored.gameId || '').toUpperCase()) {
+          await joinGameWithId(urlCode); // sets gameId + startPolling + renders
+          _joinedFromLink = true;
+        }
+      }
+    } catch (e) { console.warn('[ShareLink] auto-join failed', e); }
+
+    if (!_joinedFromLink && stored.gameId) {
       // Validate the stored session before rejoining — clear it if the game is stale or over
       let sessionValid = false;
       let snap = null; // hoisted so it's accessible outside the try block
