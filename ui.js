@@ -576,7 +576,34 @@ timeLimitSelect.addEventListener("change", async () => {
   hostRoundTimeLimitSec = allowed.includes(sec) ? sec : 300;
   timeLimitSelect.value = String(hostRoundTimeLimitSec);
   await storageSet({ roundTimeLimitSec: hostRoundTimeLimitSec });
+  syncTimerChip();
 });
+
+// Panel round-timer chip — shows the current limit (default 5 min) and opens the
+// Settings modal (little cog), so the host sees and sets the round timer without
+// hunting through a menu. Shown to the host in the lobby (see updateGameControls).
+const timerChip = document.createElement("div");
+Object.assign(timerChip.style, {
+  display: "none", alignItems: "center", gap: "6px", cursor: "pointer",
+  marginTop: "2px", marginBottom: "10px", fontSize: "13px", fontWeight: "700", color: "#000",
+});
+timerChip.setAttribute("role", "button");
+timerChip.setAttribute("tabindex", "0");
+timerChip.title = "Round settings";
+const timerChipText = document.createElement("span");
+timerChip.appendChild(timerChipText);
+const timerChipCog = document.createElement("span");
+timerChipCog.innerHTML = ICON_SETTINGS;
+Object.assign(timerChipCog.style, { display: "inline-flex", alignItems: "center", color: "#000" });
+timerChip.appendChild(timerChipCog);
+function syncTimerChip() {
+  const label = timeLimitPresetsLabel[hostRoundTimeLimitSec] || `${Math.round(hostRoundTimeLimitSec / 60)} min`;
+  timerChipText.textContent = `Round limit: ${label}`;
+}
+syncTimerChip();
+timerChip.addEventListener("click", () => openSettingsModal());
+timerChip.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSettingsModal(); } });
+actionRow.appendChild(timerChip);
 
 startRoundBtn.addEventListener("click", async () => {
   if (!gameId) { alert("No active game"); return; }
@@ -998,16 +1025,10 @@ _settingsModal.body.appendChild(timeLimitRow);
 
 const _settingsTimeNote = document.createElement("div");
 _settingsTimeNote.textContent = "Applies to rounds you host.";
-Object.assign(_settingsTimeNote.style, { fontSize: "11px", color: "#5a4a00", marginTop: "4px", marginBottom: "16px" });
+Object.assign(_settingsTimeNote.style, { fontSize: "11px", color: "#5a4a00", marginTop: "4px" });
 _settingsModal.body.appendChild(_settingsTimeNote);
 
-const _settingsDevBtn = document.createElement("button");
-_settingsDevBtn.textContent = "Developer tools…";
-_settingsDevBtn.className = "blue-button";
-_settingsDevBtn.addEventListener("click", () => {
-  promptDebugPassword(() => { closeSettingsModal(); openDebugPanel(); });
-});
-_settingsModal.body.appendChild(_settingsDevBtn);
+// (Debug panel stays a hidden secret — Shift+click the header. No visible entry.)
 
 function openSettingsModal() { _settingsModal.open(); }
 function closeSettingsModal() { _settingsModal.close(); }
@@ -2093,12 +2114,14 @@ function refreshStatusUI(snapshotGame) {
     }
   }
 
-  // Show host Start Round button if in lobby. (The round time limit moved to the
-  // Settings modal, so it's no longer toggled here.)
+  // Show host Start Round button + the round-timer chip if in lobby.
   if (snapshotGame && snapshotGame.status === 'lobby' && role === 'host') {
     startRoundBtn.style.display = 'inline-block';
+    timerChip.style.display = 'inline-flex';
+    syncTimerChip();
   } else {
     startRoundBtn.style.display = 'none';
+    timerChip.style.display = 'none';
   }
 
   // Show "waiting for host" nudge to guests in the lobby

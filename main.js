@@ -93,6 +93,21 @@
       }
     }
 
+    // Actor page tracking: capture intermediate actors on /name/ page load via
+    // document.title, mirroring the title tracking above. This is reliable and
+    // replaces depending on click-time anchor text (which stopped yielding the
+    // actor name when IMDb changed its link markup — dropping every intermediate
+    // actor from the path so only titles showed between the endpoints).
+    if (window.location.pathname.startsWith('/name/') && window.location.pathname.split('/').filter(Boolean).length === 2) {
+      if (stored.gameId && !stored.finished) {
+        const rawActor = document.title.replace(/\s*[-–]\s*IMDb\s*$/i, '').trim();
+        if (rawActor && clickPath[clickPath.length - 1] !== rawActor) {
+          clickPath.push(rawActor);
+          await storageSet({ clickPath });
+        }
+      }
+    }
+
     if (stored.gameId) {
       // Validate the stored session before rejoining — clear it if the game is stale or over
       let sessionValid = false;
