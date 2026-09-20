@@ -428,15 +428,12 @@ joinBtn.textContent = "Join Game";
 joinBtn.className = "blue-button";
 btnRow.appendChild(joinBtn);
 
-// Action buttons — a vertical stack so each control gets its own full-width row.
-// This keeps placement consistent: buttons no longer sit inline where a
-// resizing button (e.g. Copy → "Copied!") would reflow their neighbours, and
-// nothing overlaps the Leave button.
+// Action buttons (Leave/Give Up) — inline layout. The round-limit chip sits on
+// its own line at the top (see timerChip) so it never overlaps a button or jumps
+// when the Copy button momentarily resizes.
 const actionRow = document.createElement("div");
-Object.assign(actionRow.style, {
-  marginTop: "8px", display: "none", flexDirection: "column",
-  alignItems: "stretch", gap: "8px",
-});
+actionRow.style.marginTop = "6px";
+actionRow.style.display = "none";
 panelContent.appendChild(actionRow);
 
 // Give Up Button (New)
@@ -609,8 +606,9 @@ syncTimerChip();
 timerChip.addEventListener("click", () => openSettingsModal());
 timerChip.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSettingsModal(); } });
 timerChip.style.marginTop = "0";
-timerChip.style.marginBottom = "0"; // gap on actionRow handles spacing now
-// Put the round-limit chip at the top of the action stack (above Start Round).
+timerChip.style.marginBottom = "8px"; // space between the chip's own line and the inline buttons below
+// Put the round-limit chip on its own line at the top of the action row (a
+// block-level flex row, so the inline buttons below can't reflow it).
 actionRow.insertBefore(timerChip, actionRow.firstChild);
 
 startRoundBtn.addEventListener("click", async () => {
@@ -2114,8 +2112,8 @@ function refreshStatusUI(snapshotGame) {
         const currentPlayer = snapshotGame?.players?.[playerId];
         const canGiveUp = isStarted && currentPlayer && !currentPlayer.finishedAt && !currentPlayer.gaveUp;
 
-        actionRow.style.display = "flex";
-        giveUpBtn.style.display = canGiveUp ? "block" : "none";
+        actionRow.style.display = "block";
+        giveUpBtn.style.display = canGiveUp ? "inline-block" : "none";
 
     } else {
         actionRow.style.display = "none";
@@ -2126,7 +2124,7 @@ function refreshStatusUI(snapshotGame) {
   // a full-width block row (its own line) so it never gets pulled into the button
   // flow — e.g. it won't jump when the Copy button momentarily shrinks to "Copied".
   if (snapshotGame && snapshotGame.status === 'lobby' && role === 'host') {
-    startRoundBtn.style.display = 'block';
+    startRoundBtn.style.display = 'inline-block';
     timerChip.style.display = 'flex';
     syncTimerChip();
   } else {
@@ -2243,7 +2241,7 @@ function updateGameControls() {
   startBtn.style.display = inGame ? "none" : "inline-block";
   joinBtn.style.display = inGame ? "none" : "inline-block";
   if (inGame) joinRow.style.display = "none"; // hide when in-game; preserve user-toggled state otherwise
-  actionRow.style.display = inGame ? "flex" : "none"; // flex: vertical control stack (see actionRow setup)
+  actionRow.style.display = inGame ? "block" : "none";
   lobbyBox.style.display = inGame ? "block" : "none";
   hintDiv.style.display = inGame ? "none" : "block";
 
