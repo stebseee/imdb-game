@@ -636,6 +636,27 @@ lobbyBox.style.background = "rgba(0,0,0,0.02)";
 lobbyBox.style.display = "none";
 panelContent.appendChild(lobbyBox);
 
+// Finisher "you're done" card — shown at the top of the leaderboard box when the
+// local player has finished but the round is still running (others still racing).
+// The live leaderboard renders below it, so they can watch the others' clicks.
+const finishedCard = document.createElement("div");
+Object.assign(finishedCard.style, {
+  display: "none", marginBottom: "10px", padding: "10px 12px", borderRadius: "8px",
+  background: "#1a7a4a", color: "#fff", fontFamily: "Arial, sans-serif",
+});
+const finishedCardTitle = document.createElement("div");
+finishedCardTitle.textContent = "✅ You finished!";
+Object.assign(finishedCardTitle.style, { fontWeight: "800", fontSize: "16px", marginBottom: "3px" });
+finishedCard.appendChild(finishedCardTitle);
+const finishedCardStats = document.createElement("div");
+Object.assign(finishedCardStats.style, { fontSize: "13px", opacity: "0.95" });
+finishedCard.appendChild(finishedCardStats);
+const finishedCardNote = document.createElement("div");
+finishedCardNote.textContent = "Sit tight — watch the others race below.";
+Object.assign(finishedCardNote.style, { fontSize: "12px", opacity: "0.85", marginTop: "5px" });
+finishedCard.appendChild(finishedCardNote);
+lobbyBox.appendChild(finishedCard); // first child of lobbyBox (above the leaderboard title)
+
 const lobbyTitle = document.createElement("div");
 lobbyTitle.style.fontWeight = "600";
 lobbyTitle.style.marginBottom = "6px";
@@ -2128,6 +2149,21 @@ function refreshStatusUI(snapshotGame) {
         lobbyTitle.textContent = (snapshotGame && snapshotGame.status === 'active')
           ? "Leaderboard"
           : "Lobby";
+
+        // Finisher "you're done" card — shown when you've finished the current
+        // (still-running) round. Keeps you on the live leaderboard rather than
+        // jumping to the winners board, so you can watch the others race.
+        const meRec = snapshotGame?.players?.[playerId];
+        const iFinished = snapshotGame && snapshotGame.status === 'active' && meRec?.finishedAt && !meRec?.gaveUp;
+        if (iFinished) {
+          const base = snapshotGame.startedAt || roundStartedAt;
+          const dur = (base && meRec.finishedAt) ? formatDuration(meRec.finishedAt - base) : '';
+          const c = Number(meRec.clicks ?? 0);
+          finishedCardStats.textContent = `${c} click${c === 1 ? '' : 's'}${dur ? ` · ${dur}` : ''}`;
+          finishedCard.style.display = 'block';
+        } else {
+          finishedCard.style.display = 'none';
+        }
 
         // Session tally in lobby — show if at least 1 round has been played
         const lobbyWins = snapshotGame?.wins || {};
