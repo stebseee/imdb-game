@@ -44,9 +44,9 @@
     if (!displayName) displayName = `Player-${playerId}`;
 
     // Load persistent career stats (survives across sessions) and render them.
-    // touchMyStats() also seeds/refreshes this player's /players node.
+    // The /players node is seeded on name-save and updated each round, so we only
+    // READ here — no per-navigation write.
     loadMyStats().then(renderCareerStats).catch(() => {});
-    touchMyStats();
 
     if (stored.role) role = stored.role;
     if (stored.hasRedirected) hasRedirected = stored.hasRedirected;

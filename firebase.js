@@ -7,9 +7,24 @@
 // All db helpers append ?auth=TOKEN so security rules can enforce auth != null.
 let _fbIdToken = null;
 let _fbTokenExpiry = 0;
+let _fbTokenInFlight = null; // shared promise so N concurrent callers make ONE auth request
 
+// Public entry point: returns a valid token, coalescing concurrent callers.
+// The content script reloads on every navigation, so many call sites (SSE,
+// session validation, stats, heartbeat) all ask for a token at once on load —
+// without this coalescing each fired its own sign-in/refresh, hammering Google's
+// auth endpoints and tripping rate limits (TOO_MANY_ATTEMPTS_TRY_LATER).
 async function getFirebaseToken() {
   // Return cached token if still valid (with 60 s buffer)
+  if (_fbIdToken && Date.now() < _fbTokenExpiry - 60_000) return _fbIdToken;
+  // A fetch is already underway this page load — reuse it instead of starting another.
+  if (_fbTokenInFlight) return _fbTokenInFlight;
+  _fbTokenInFlight = _acquireFirebaseToken().finally(() => { _fbTokenInFlight = null; });
+  return _fbTokenInFlight;
+}
+
+async function _acquireFirebaseToken() {
+  // Re-check the cache in case a prior in-flight request just populated it.
   if (_fbIdToken && Date.now() < _fbTokenExpiry - 60_000) return _fbIdToken;
 
   // Try refreshing with stored refresh token first
