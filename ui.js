@@ -158,7 +158,33 @@ collapseBtn.id = "collapseBtn";
 Object.assign(collapseBtn.style, {
   fontSize: "16px", lineHeight: "1", marginLeft: "8px", flexShrink: "0",
 });
+
+// Header icon toolbar — single home for secondary views so features hang off
+// icons instead of stacking buttons down the panel. Each icon stops propagation
+// so clicking it doesn't also toggle the header's collapse.
+const headerTools = document.createElement("span");
+Object.assign(headerTools.style, { display: "flex", alignItems: "center", gap: "10px", marginLeft: "auto", flexShrink: "0" });
+
+function makeToolIcon(glyph, label, onClick) {
+  const el = document.createElement("span");
+  el.textContent = glyph;
+  el.setAttribute("role", "button");
+  el.setAttribute("tabindex", "0");
+  el.setAttribute("aria-label", label);
+  el.title = label;
+  Object.assign(el.style, { fontSize: "15px", lineHeight: "1", cursor: "pointer", userSelect: "none" });
+  el.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onClick(); } });
+  return el;
+}
+
+const profileToolBtn = makeToolIcon("📊", "Your profile & stats", () => openProfileModal());
+const rulesToolBtn   = makeToolIcon("❔", "Rules", () => openRulesModal());
+headerTools.appendChild(profileToolBtn);
+headerTools.appendChild(rulesToolBtn);
+
 header.appendChild(headerTitle);
+header.appendChild(headerTools);
 header.appendChild(collapseBtn);
 uiBox.appendChild(header);
 
@@ -221,34 +247,9 @@ Object.assign(nameEditHint.style, {
 });
 nameDisplay.appendChild(nameEditHint);
 
-// Persistent career W/L line (cross-session; populated from /players — see stats.js).
-// Sibling of nameDisplay so it stays visible in both view and edit mode.
-const careerLine = document.createElement("div");
-careerLine.id = "careerLine";
-Object.assign(careerLine.style, {
-  display: "block",
-  fontSize: "12px",
-  opacity: "0.85",
-  marginTop: "10px",
-  paddingTop: "8px",
-  borderTop: "1px solid rgba(0, 0, 0, 0.1)",
-  lineHeight: "1.3",
-});
-nameRow.appendChild(careerLine);
-
-// Render the persistent career line. Pass the /players/{id} stats object, or
-// null/undefined to show the "no games yet" state.
-function renderCareerStats(stats) {
-  const wins   = Number(stats?.totalWins   ?? 0);
-  const rounds = Number(stats?.totalRounds ?? 0);
-  if (!rounds) {
-    careerLine.textContent = "Career: no games yet";
-    return;
-  }
-  const losses = Math.max(0, rounds - wins);
-  const pct = Math.round((wins / rounds) * 100);
-  careerLine.textContent = `Career: ${wins}W / ${losses}L · ${pct}%`;
-}
+// Career + head-to-head stats no longer live on the panel — they open in the
+// Profile modal (see the PROFILE / STATS MODAL section below), reached from the
+// 📊 icon in the header toolbar. renderCareerStats() populates that modal.
 
 // Edit mode: text input
 const nameInput = document.createElement("input");
@@ -657,11 +658,12 @@ panelContent.appendChild(hintDiv);
 // ----------------------
 // RULES MODAL
 // Add a Rules button at the bottom of the main modal which opens a secondary modal overlay
+// Rules now open from the ❔ icon in the header toolbar. This button is kept
+// (not appended to the panel) only so existing focus()/handler references stay valid.
 const rulesBtn = document.createElement("button");
 rulesBtn.textContent = "Rules";
 rulesBtn.className = "blue-button";
 rulesBtn.style.marginTop = "12px";
-panelContent.appendChild(rulesBtn);
 
 // Create the overlay that will appear on top of everything
 const rulesOverlay = document.createElement("div");
@@ -767,6 +769,194 @@ document.addEventListener("keydown", (e) => {
     closeRulesModal();
   }
 });
+
+// ----------------------
+// MODAL FRAMEWORK
+// A small reusable modal (backdrop + golden box + title + close), mirroring the
+// Rules modal styling. Returns handles plus open()/close() with ESC and
+// backdrop-click support. New secondary views (Profile, later Settings) use this
+// so they stay consistent without copy-pasting the overlay boilerplate.
+function createModal(titleText, widthPx = 360) {
+  const overlay = document.createElement("div");
+  Object.assign(overlay.style, {
+    position: "fixed", inset: "0", background: "rgba(0,0,0,0.5)",
+    zIndex: 1000002, alignItems: "center", justifyContent: "center",
+    padding: "10px", boxSizing: "border-box", display: "none",
+  });
+  overlay.setAttribute("aria-hidden", "true");
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+
+  const box = document.createElement("div");
+  Object.assign(box.style, {
+    width: widthPx + "px", maxWidth: "100%",
+    background: "linear-gradient(295deg,rgba(110, 88, 10, 1) 0%, rgba(245, 197, 24, 1) 100%)",
+    color: "#000", borderRadius: "10px", padding: "16px", boxSizing: "border-box",
+    boxShadow: "0 6px 24px rgba(0,0,0,0.4)", textAlign: "left",
+    fontFamily: "Arial, sans-serif", fontSize: "14px", lineHeight: "1.4",
+    maxHeight: "82vh", overflowY: "auto",
+  });
+  overlay.appendChild(box);
+
+  const titleRow = document.createElement("div");
+  Object.assign(titleRow.style, { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" });
+  const titleEl = document.createElement("div");
+  titleEl.textContent = titleText;
+  Object.assign(titleEl.style, { fontWeight: "700", fontSize: "16px", color: "#000" });
+  const closeX = document.createElement("span");
+  closeX.textContent = "✕";
+  closeX.setAttribute("role", "button");
+  closeX.setAttribute("aria-label", "Close");
+  closeX.title = "Close";
+  Object.assign(closeX.style, { cursor: "pointer", fontSize: "16px", lineHeight: "1", padding: "2px 4px", userSelect: "none" });
+  titleRow.appendChild(titleEl);
+  titleRow.appendChild(closeX);
+  box.appendChild(titleRow);
+
+  const body = document.createElement("div");
+  box.appendChild(body);
+
+  document.body.appendChild(overlay);
+
+  function open() {
+    overlay.style.display = "flex";
+    overlay.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    closeX.focus();
+  }
+  function close() {
+    overlay.style.display = "none";
+    overlay.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+  closeX.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay.style.display === "flex") close(); });
+
+  return { overlay, box, body, titleEl, open, close };
+}
+
+// ----------------------
+// PROFILE / STATS MODAL
+// Career win/loss + head-to-head, keyed on this browser's player (see stats.js).
+const _profileModal = createModal("Your profile", 340);
+
+// Identity row: initials avatar + name
+const _profileIdentity = document.createElement("div");
+Object.assign(_profileIdentity.style, { display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" });
+const _profileAvatar = document.createElement("div");
+Object.assign(_profileAvatar.style, {
+  width: "44px", height: "44px", borderRadius: "50%", background: "#3E49AD", color: "#F5C518",
+  display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "15px", flexShrink: "0",
+});
+const _profileNameEl = document.createElement("div");
+Object.assign(_profileNameEl.style, { fontWeight: "700", fontSize: "15px", color: "#000" });
+_profileIdentity.appendChild(_profileAvatar);
+_profileIdentity.appendChild(_profileNameEl);
+_profileModal.body.appendChild(_profileIdentity);
+
+// Metric cards: wins / losses / win rate
+function _makeStatCard(label, accent) {
+  const card = document.createElement("div");
+  Object.assign(card.style, {
+    flex: "1", background: accent ? "#3E49AD" : "rgba(255,255,255,0.55)", borderRadius: "8px",
+    padding: "10px 6px", textAlign: "center",
+  });
+  const lab = document.createElement("div");
+  lab.textContent = label;
+  Object.assign(lab.style, { fontSize: "11px", color: accent ? "#cdd2f2" : "#5a4a00" });
+  const val = document.createElement("div");
+  val.textContent = "0";
+  Object.assign(val.style, { fontSize: "22px", fontWeight: "700", color: accent ? "#F5C518" : "#000" });
+  card.appendChild(lab);
+  card.appendChild(val);
+  return { card, val };
+}
+const _cardsRow = document.createElement("div");
+Object.assign(_cardsRow.style, { display: "flex", gap: "8px", marginBottom: "16px" });
+const _winsCard = _makeStatCard("wins", false);
+const _lossesCard = _makeStatCard("losses", false);
+const _rateCard = _makeStatCard("win rate", true);
+_cardsRow.appendChild(_winsCard.card);
+_cardsRow.appendChild(_lossesCard.card);
+_cardsRow.appendChild(_rateCard.card);
+_profileModal.body.appendChild(_cardsRow);
+
+// Head-to-head
+const _h2hHeading = document.createElement("div");
+_h2hHeading.textContent = "Head-to-head";
+Object.assign(_h2hHeading.style, { fontSize: "12px", color: "#5a4a00", marginBottom: "6px", fontWeight: "700" });
+_profileModal.body.appendChild(_h2hHeading);
+const _h2hList = document.createElement("div");
+Object.assign(_h2hList.style, { border: "0.5px solid rgba(0,0,0,0.25)", borderRadius: "8px", overflow: "hidden", background: "rgba(255,255,255,0.4)" });
+_profileModal.body.appendChild(_h2hList);
+
+const _profileFootnote = document.createElement("div");
+_profileFootnote.textContent = "Stats are saved to this browser. Sign in later to carry them across devices.";
+Object.assign(_profileFootnote.style, { fontSize: "11px", color: "#5a4a00", marginTop: "10px", lineHeight: "1.5" });
+_profileModal.body.appendChild(_profileFootnote);
+
+function _initials(name) {
+  const n = (name || "").trim();
+  if (!n) return "🎬";
+  const parts = n.split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return n.slice(0, 2).toUpperCase();
+}
+
+// Populate the profile modal from a /players/{id} stats object (or null).
+function renderCareerStats(stats) {
+  const wins   = Number(stats?.totalWins   ?? 0);
+  const rounds = Number(stats?.totalRounds ?? 0);
+  const losses = Math.max(0, rounds - wins);
+  const pct = rounds ? Math.round((wins / rounds) * 100) : 0;
+  _winsCard.val.textContent = String(wins);
+  _lossesCard.val.textContent = String(losses);
+  _rateCard.val.textContent = rounds ? pct + "%" : "—";
+
+  // Head-to-head rows, sorted by most games played
+  _h2hList.innerHTML = "";
+  const vs = (stats && stats.vs && typeof stats.vs === "object") ? stats.vs : {};
+  const rows = Object.keys(vs).map((oppId) => {
+    const r = vs[oppId] || {};
+    return { name: r.lastName || `Player-${oppId}`, wins: Number(r.wins || 0), losses: Number(r.losses || 0) };
+  }).filter(r => (r.wins + r.losses) > 0)
+    .sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses));
+
+  if (rows.length === 0) {
+    const empty = document.createElement("div");
+    empty.textContent = rounds ? "No head-to-head record yet." : "No games yet — play a round to start your record.";
+    Object.assign(empty.style, { padding: "10px 12px", fontSize: "13px", color: "#5a4a00" });
+    _h2hList.appendChild(empty);
+    return;
+  }
+  rows.forEach((r, i) => {
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      display: "flex", justifyContent: "space-between", padding: "9px 12px",
+      borderBottom: i < rows.length - 1 ? "0.5px solid rgba(0,0,0,0.15)" : "none",
+    });
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = `vs ${r.name}`;
+    Object.assign(nameSpan.style, { fontSize: "13px", color: "#000" });
+    const scoreSpan = document.createElement("span");
+    scoreSpan.textContent = `${r.wins}–${r.losses}`;
+    const good = r.wins >= r.losses;
+    Object.assign(scoreSpan.style, { fontSize: "13px", fontWeight: "700", color: good ? "#0f6e2f" : "#a32d2d" });
+    row.appendChild(nameSpan);
+    row.appendChild(scoreSpan);
+    _h2hList.appendChild(row);
+  });
+}
+
+function openProfileModal() {
+  // Refresh identity + stats each open so they're current.
+  _profileNameEl.textContent = displayName || `Player-${playerId || ""}`;
+  _profileAvatar.textContent = _initials(displayName);
+  _profileModal.open();
+  loadMyStats().then(renderCareerStats).catch(() => {});
+}
+function closeProfileModal() { _profileModal.close(); }
 
 // ----------------------
 // DEBUG PANEL — Shift+click the header to open
