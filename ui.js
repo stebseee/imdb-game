@@ -165,21 +165,26 @@ Object.assign(collapseBtn.style, {
 const headerTools = document.createElement("span");
 Object.assign(headerTools.style, { display: "flex", alignItems: "center", gap: "10px", marginLeft: "auto", flexShrink: "0" });
 
-function makeToolIcon(glyph, label, onClick) {
+// Inline monochrome SVG icons that inherit the header's black text colour
+// (currentColor) — no emoji, no white background boxes.
+const ICON_STATS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="3" y="12" width="4.5" height="8" rx="1"/><rect x="9.75" y="7" width="4.5" height="13" rx="1"/><rect x="16.5" y="3" width="4.5" height="17" rx="1"/></svg>`;
+const ICON_RULES = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="16.5" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor" font-family="Arial, sans-serif">?</text></svg>`;
+
+function makeToolIcon(svgMarkup, label, onClick) {
   const el = document.createElement("span");
-  el.textContent = glyph;
+  el.innerHTML = svgMarkup;
   el.setAttribute("role", "button");
   el.setAttribute("tabindex", "0");
   el.setAttribute("aria-label", label);
   el.title = label;
-  Object.assign(el.style, { fontSize: "15px", lineHeight: "1", cursor: "pointer", userSelect: "none" });
+  Object.assign(el.style, { display: "inline-flex", alignItems: "center", color: "#000", lineHeight: "1", cursor: "pointer", userSelect: "none" });
   el.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
   el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onClick(); } });
   return el;
 }
 
-const profileToolBtn = makeToolIcon("📊", "Your profile & stats", () => openProfileModal());
-const rulesToolBtn   = makeToolIcon("❔", "Rules", () => openRulesModal());
+const profileToolBtn = makeToolIcon(ICON_STATS, "Your profile & stats", () => openProfileModal());
+const rulesToolBtn   = makeToolIcon(ICON_RULES, "Rules", () => openRulesModal());
 headerTools.appendChild(profileToolBtn);
 headerTools.appendChild(rulesToolBtn);
 

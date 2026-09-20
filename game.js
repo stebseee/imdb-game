@@ -290,6 +290,12 @@ async function leaveGame(shouldRestart = false) {
   
   const leavingGameId = gameId; // capture before clearing local state
 
+  // Stop the SSE stream + heartbeat FIRST. Otherwise a heartbeat tick can fire
+  // between the delete below and the later stopPolling(), re-creating our player
+  // record as { lastSeen } with no name — which shows up to others as a ghost
+  // player (a raw pid + Kick button).
+  stopPolling();
+
   try {
     // Remove player entry (set to null)
     await dbPatch(`${leavingGameId}/players/${playerId}`, null);
@@ -485,6 +491,17 @@ async function processSnapshot(snapshot) {
   const players = snapshot.players || {};
   const playerIds = Object.keys(players);
   const currentPlayer = players[playerId];
+
+  // --- Promotion to host ---
+  // When the previous host leaves/disconnects, transferHost() sets hostId to us.
+  // Sync our local role (host-only actions elsewhere check role) and tell the
+  // player once. Never fires on create/join since role is already correct there.
+  if (gameId && !_leavingGame && snapshot.hostId === playerId && role !== 'host') {
+    role = 'host';
+    await storageSet({ role });
+    updateGameControls();
+    alert("You're now the host — the previous host left the game.");
+  }
 
   // --- Career stats: record each round exactly once ---
   // Driven by OBSERVING the finished state, not by the conclude race (which any
@@ -797,7 +814,7 @@ async function startStreaming() {
   // Also re-evaluates processSnapshot so stale-lastSeen of other players is caught even
   // when nothing else changes in the DB.
   _sseHeartbeat = setInterval(async () => {
-    if (!gameId || !gameSnapshot) return;
+    if (!gameId || !gameSnapshot || _leavingGame) return; // never re-write our record while leaving
     if (gameSnapshot.status === 'active') {
       const cp = gameSnapshot.players?.[playerId];
       if (cp && !cp.finishedAt && !cp.gaveUp) {
