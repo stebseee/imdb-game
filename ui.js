@@ -428,10 +428,15 @@ joinBtn.textContent = "Join Game";
 joinBtn.className = "blue-button";
 btnRow.appendChild(joinBtn);
 
-// Action buttons (Leave/Give Up)
+// Action buttons — a vertical stack so each control gets its own full-width row.
+// This keeps placement consistent: buttons no longer sit inline where a
+// resizing button (e.g. Copy → "Copied!") would reflow their neighbours, and
+// nothing overlaps the Leave button.
 const actionRow = document.createElement("div");
-actionRow.style.marginTop = "6px";
-actionRow.style.display = "none";
+Object.assign(actionRow.style, {
+  marginTop: "8px", display: "none", flexDirection: "column",
+  alignItems: "stretch", gap: "8px",
+});
 panelContent.appendChild(actionRow);
 
 // Give Up Button (New)
@@ -603,7 +608,10 @@ function syncTimerChip() {
 syncTimerChip();
 timerChip.addEventListener("click", () => openSettingsModal());
 timerChip.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSettingsModal(); } });
-actionRow.appendChild(timerChip);
+timerChip.style.marginTop = "0";
+timerChip.style.marginBottom = "0"; // gap on actionRow handles spacing now
+// Put the round-limit chip at the top of the action stack (above Start Round).
+actionRow.insertBefore(timerChip, actionRow.firstChild);
 
 startRoundBtn.addEventListener("click", async () => {
   if (!gameId) { alert("No active game"); return; }
@@ -2106,18 +2114,20 @@ function refreshStatusUI(snapshotGame) {
         const currentPlayer = snapshotGame?.players?.[playerId];
         const canGiveUp = isStarted && currentPlayer && !currentPlayer.finishedAt && !currentPlayer.gaveUp;
 
-        actionRow.style.display = "block";
-        giveUpBtn.style.display = canGiveUp ? "inline-block" : "none";
+        actionRow.style.display = "flex";
+        giveUpBtn.style.display = canGiveUp ? "block" : "none";
 
     } else {
         actionRow.style.display = "none";
     }
   }
 
-  // Show host Start Round button + the round-timer chip if in lobby.
+  // Show host Start Round button + the round-timer chip if in lobby. The chip is
+  // a full-width block row (its own line) so it never gets pulled into the button
+  // flow — e.g. it won't jump when the Copy button momentarily shrinks to "Copied".
   if (snapshotGame && snapshotGame.status === 'lobby' && role === 'host') {
-    startRoundBtn.style.display = 'inline-block';
-    timerChip.style.display = 'inline-flex';
+    startRoundBtn.style.display = 'block';
+    timerChip.style.display = 'flex';
     syncTimerChip();
   } else {
     startRoundBtn.style.display = 'none';
@@ -2233,7 +2243,7 @@ function updateGameControls() {
   startBtn.style.display = inGame ? "none" : "inline-block";
   joinBtn.style.display = inGame ? "none" : "inline-block";
   if (inGame) joinRow.style.display = "none"; // hide when in-game; preserve user-toggled state otherwise
-  actionRow.style.display = inGame ? "block" : "none";
+  actionRow.style.display = inGame ? "flex" : "none"; // flex: vertical control stack (see actionRow setup)
   lobbyBox.style.display = inGame ? "block" : "none";
   hintDiv.style.display = inGame ? "none" : "block";
 
