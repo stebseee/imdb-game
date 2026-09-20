@@ -39,9 +39,10 @@
     }
 
     displayName = stored.displayName || null;
-    // Start in edit mode if no name saved yet, otherwise view mode
+    // Prime the name edit UI (now inside the Profile modal) in the right state.
     setNameEditMode(!displayName);
     if (!displayName) displayName = `Player-${playerId}`;
+    syncNameChip(); // reflect the resolved name on the panel chip
 
     // Load persistent career stats (survives across sessions) and render them.
     // The /players node is seeded on name-save and updated each round, so we only

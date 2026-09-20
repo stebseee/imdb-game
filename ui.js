@@ -219,10 +219,30 @@ gameInfo.style.marginBottom = "8px";
 gameInfo.innerHTML = "Game: <em>Not in a game</em>";
 panelContent.appendChild(gameInfo);
 
-// Name row — click-to-edit: shows name + subtle hint in view mode, input + save in edit mode
+// Panel name area — kept as `nameRow` so the existing show/hide-by-state and
+// round-timer positioning logic keeps working. It now holds a compact chip that
+// opens the Profile modal (where name editing lives), instead of inline editing.
 const nameRow = document.createElement("div");
 nameRow.style.marginTop = "8px";
 panelContent.appendChild(nameRow);
+
+const nameChip = document.createElement("div");
+Object.assign(nameChip.style, {
+  cursor: "pointer", fontWeight: "700", fontSize: "15px",
+  display: "inline-block", textDecoration: "underline", textDecorationStyle: "dotted",
+});
+nameChip.setAttribute("role", "button");
+nameChip.setAttribute("tabindex", "0");
+nameChip.title = "View your profile & stats";
+function syncNameChip() { nameChip.textContent = displayName || "Set your name"; }
+nameChip.addEventListener("click", () => openProfileModal());
+nameChip.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openProfileModal(); } });
+nameRow.appendChild(nameChip);
+
+// Name editing UI — the same element objects as before (so game.js handlers and
+// setNameEditMode keep working), but grouped in a container that gets appended
+// into the Profile modal when it's built, instead of onto the panel.
+const nameEditContainer = document.createElement("div");
 
 // View mode: clickable name block
 const nameDisplay = document.createElement("div");
@@ -230,7 +250,7 @@ Object.assign(nameDisplay.style, {
   cursor: "pointer",
   display: "inline-block",
 });
-nameRow.appendChild(nameDisplay);
+nameEditContainer.appendChild(nameDisplay);
 
 // Inner name text (bigger)
 const nameDisplayText = document.createElement("div");
@@ -266,7 +286,7 @@ Object.assign(nameInput.style, {
   boxSizing: "border-box", border: "1px solid #ccc", borderRadius: "4px",
   lineHeight: "normal",
 });
-nameRow.appendChild(nameInput);
+nameEditContainer.appendChild(nameInput);
 
 // Edit mode: Save button
 const nameSaveBtn = document.createElement("button");
@@ -274,19 +294,19 @@ nameSaveBtn.textContent = "Save";
 nameSaveBtn.id = "nameSaveBtn";
 nameSaveBtn.className = "blue-button";
 Object.assign(nameSaveBtn.style, { display: "none", verticalAlign: "middle", marginBottom: "0" });
-nameRow.appendChild(nameSaveBtn);
+nameEditContainer.appendChild(nameSaveBtn);
 
 // Kept for compatibility with any remaining references (hidden, never shown)
 const nameEditBtn = document.createElement("button");
 nameEditBtn.style.display = "none";
-nameRow.appendChild(nameEditBtn);
+nameEditContainer.appendChild(nameEditBtn);
 
 // "Set name" button shown to first-time users who have no name yet
 const setNameBtn = document.createElement("button");
 setNameBtn.textContent = "Set name";
 setNameBtn.className = "blue-button";
 setNameBtn.style.display = "none";
-nameRow.appendChild(setNameBtn);
+nameEditContainer.appendChild(setNameBtn);
 setNameBtn.addEventListener("click", () => setNameEditMode(true));
 
 // Helper: switch between view and edit mode
@@ -304,6 +324,7 @@ function setNameEditMode(editing) {
     // Show/hide the "click to edit" hint only when a name exists
     nameEditHint.style.display = hasName ? "" : "none";
   }
+  syncNameChip(); // keep the panel chip in step with the current name
 }
 
 nameDisplay.addEventListener("click", () => setNameEditMode(true));
@@ -854,10 +875,10 @@ Object.assign(_profileAvatar.style, {
   width: "44px", height: "44px", borderRadius: "50%", background: "#3E49AD", color: "#F5C518",
   display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "15px", flexShrink: "0",
 });
-const _profileNameEl = document.createElement("div");
-Object.assign(_profileNameEl.style, { fontWeight: "700", fontSize: "15px", color: "#000" });
 _profileIdentity.appendChild(_profileAvatar);
-_profileIdentity.appendChild(_profileNameEl);
+// Name editing lives here now (relocated from the panel). setNameEditMode toggles
+// its view/edit state; the panel shows a read-only chip that opens this modal.
+_profileIdentity.appendChild(nameEditContainer);
 _profileModal.body.appendChild(_profileIdentity);
 
 // Metric cards: wins / losses / win rate
@@ -955,9 +976,11 @@ function renderCareerStats(stats) {
 }
 
 function openProfileModal() {
-  // Refresh identity + stats each open so they're current.
-  _profileNameEl.textContent = displayName || `Player-${playerId || ""}`;
+  // Refresh identity + stats each open so they're current. setNameEditMode(false)
+  // shows the name in view mode (or the "Set name" prompt for first-timers) and
+  // syncs the panel chip.
   _profileAvatar.textContent = _initials(displayName);
+  setNameEditMode(false);
   _profileModal.open();
   loadMyStats().then(renderCareerStats).catch(() => {});
 }
