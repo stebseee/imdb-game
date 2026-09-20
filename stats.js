@@ -96,7 +96,21 @@ async function recordRoundStats({ participantPids, winnerPid, nameOf }) {
       update[`${pid}/lastSeen`]      = now;
       update[`${pid}/schemaVersion`] = STATS_SCHEMA_VERSION;
     }
-    if (winnerPid) update[`${winnerPid}/totalWins`] = _fbIncrement;
+    if (winnerPid) {
+      update[`${winnerPid}/totalWins`] = _fbIncrement;
+      const winnerName = (nameOf && nameOf[winnerPid]) || `Player-${winnerPid}`;
+      // Head-to-head: the winner beat each other participant this round, so
+      // winner +1 win vs each opponent, and each opponent +1 loss vs winner.
+      // Keyed on opponent id; lastName is stored only for display.
+      for (const pid of participantPids) {
+        if (pid === winnerPid) continue;
+        const oppName = (nameOf && nameOf[pid]) || `Player-${pid}`;
+        update[`${winnerPid}/vs/${pid}/wins`]     = _fbIncrement;
+        update[`${winnerPid}/vs/${pid}/lastName`] = oppName;
+        update[`${pid}/vs/${winnerPid}/losses`]   = _fbIncrement;
+        update[`${pid}/vs/${winnerPid}/lastName`] = winnerName;
+      }
+    }
     await playersPatch('', update);
   } catch (e) {
     console.warn('[Stats] Could not record round into career stats', e);
