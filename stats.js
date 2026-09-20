@@ -71,6 +71,11 @@ async function touchMyStats() {
   }
 }
 
+// Minimum real players for a round to count toward career stats. Solo practice
+// rounds (you against nobody) must NOT inflate wins or rounds-played, so we only
+// record rounds that were an actual contest against other players.
+const MIN_PLAYERS_FOR_STATS = 2;
+
 // Record one concluded round into lifetime stats. Called by the single client
 // that concludes the round (see game.js processSnapshot), so it writes every
 // participant's node in one fan-out PATCH using atomic server increments —
@@ -78,9 +83,11 @@ async function touchMyStats() {
 //   participantPids: everyone who played this round
 //   winnerPid:       the round winner, or null on a no-winner timeout
 //   nameOf:          { pid: displayName } to keep each /players/{id}/name fresh
+// No-op for solo rounds (fewer than MIN_PLAYERS_FOR_STATS players) — they don't
+// count as wins or as rounds played.
 async function recordRoundStats({ participantPids, winnerPid, nameOf }) {
   try {
-    if (!participantPids || participantPids.length === 0) return;
+    if (!participantPids || participantPids.length < MIN_PLAYERS_FOR_STATS) return;
     const now = Date.now();
     const update = {};
     for (const pid of participantPids) {
