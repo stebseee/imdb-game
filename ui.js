@@ -512,9 +512,12 @@ const copyGroup = document.createElement("div");
 Object.assign(copyGroup.style, { display: "inline-flex", alignItems: "stretch", verticalAlign: "middle", margin: "2px", marginBottom: "20px" });
 
 // Left segment: the existing Copy Game Code button, squared on its right edge.
-copybtn.style.margin = "0";
-copybtn.style.marginBottom = "0";
-copybtn.style.borderRadius = "6px 0 0 6px";
+// Fixed width so the text swapping to "Copied!"/"Link copied!" can't shrink it
+// (which used to reflow the neighbouring buttons).
+Object.assign(copybtn.style, {
+  margin: "0", marginBottom: "0", borderRadius: "6px 0 0 6px",
+  width: "175px", boxSizing: "border-box", textAlign: "center", whiteSpace: "nowrap",
+});
 copyGroup.appendChild(copybtn);
 
 // Right segment: the invite-link chain icon (thin divider between the two).
