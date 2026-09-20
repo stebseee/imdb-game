@@ -380,6 +380,30 @@
 })();
 
 // ----------------------
+// Hide the "More like this" recommendations on title pages during active rounds.
+// It links title -> title, which would let players jump show -> show and skip the
+// actor step (the path must always be actor -> title -> actor).
+(function enforceMoreLikeThisHide() {
+  const ATTR = 'data-race-mlt-hidden';
+  function apply() {
+    document.querySelectorAll('[data-testid="MoreLikeThis"], [cel_widget_id="StaticFeature_MoreLikeThis"]').forEach(el => {
+      if (roundIsActive) {
+        if (!el.hasAttribute(ATTR)) {
+          el.style.display = 'none';
+          el.setAttribute(ATTR, '1');
+        }
+      } else if (el.hasAttribute(ATTR)) {
+        el.style.display = '';
+        el.removeAttribute(ATTR);
+      }
+    });
+  }
+  const observer = new MutationObserver(() => apply());
+  observer.observe(document.body, { childList: true, subtree: true });
+  apply();
+})();
+
+// ----------------------
 // Page enhancement: always expand Previous / Upcoming acting-role accordions on actor pages
 // ----------------------
 (function expandActorAccordions() {
