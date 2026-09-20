@@ -101,10 +101,14 @@
         const now = Date.now();
         const STALE_ROUND_MS = 30 * 60 * 1000;       // 30 minutes per round
         const STALE_GAME_MS  = 24 * 60 * 60 * 1000;  // 24 hours for the whole game
+        // NOTE: gaveUp is NOT a staleness signal. Being marked "did not finish"
+        // (including a false DNF from the disconnect heuristic) must not evict you
+        // from the game — you should keep your session, see the results board, and
+        // be able to Play Again. Truly dead games are still caught by the expired
+        // and time-based checks below.
         const stale =
           !snap ||
           snap.status === 'expired' ||
-          (snap.players?.[stored.playerId]?.gaveUp === true) ||
           (snap.status === 'active' && snap.startedAt && (now - snap.startedAt) > STALE_ROUND_MS) ||
           (snap.createdAt && (now - snap.createdAt) > STALE_GAME_MS);
         if (stale) {
@@ -138,6 +142,18 @@
         }
 
         startPolling();
+
+        // Stamp lastSeen immediately on load during an active round. A racing
+        // player is CONSTANTLY navigating, and each navigation reloads this
+        // content script — so without this, the gap between page-unload and the
+        // next 3s heartbeat can make them look disconnected, which (once the
+        // other player has finished) wrongly concludes the round against them.
+        if (snap?.status === 'active' && !finished) {
+          const meRec = snap.players?.[playerId];
+          if (meRec && !meRec.gaveUp) {
+            dbPatch(`${gameId}/players/${playerId}`, { lastSeen: Date.now() }).catch(() => {});
+          }
+        }
 
         // Page-load win check: handles navigation via debug tools (or direct URL entry)
         // where no click event fires. If we're already on actor B's page and the round
