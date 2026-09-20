@@ -169,6 +169,7 @@ Object.assign(headerTools.style, { display: "flex", alignItems: "center", gap: "
 // (currentColor) — no emoji, no white background boxes.
 const ICON_STATS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="3" y="12" width="4.5" height="8" rx="1"/><rect x="9.75" y="7" width="4.5" height="13" rx="1"/><rect x="16.5" y="3" width="4.5" height="17" rx="1"/></svg>`;
 const ICON_RULES = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="16.5" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor" font-family="Arial, sans-serif">?</text></svg>`;
+const ICON_SETTINGS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg>`;
 
 function makeToolIcon(svgMarkup, label, onClick) {
   const el = document.createElement("span");
@@ -183,9 +184,11 @@ function makeToolIcon(svgMarkup, label, onClick) {
   return el;
 }
 
-const profileToolBtn = makeToolIcon(ICON_STATS, "Your profile & stats", () => openProfileModal());
-const rulesToolBtn   = makeToolIcon(ICON_RULES, "Rules", () => openRulesModal());
+const profileToolBtn  = makeToolIcon(ICON_STATS, "Your profile & stats", () => openProfileModal());
+const settingsToolBtn = makeToolIcon(ICON_SETTINGS, "Settings", () => openSettingsModal());
+const rulesToolBtn     = makeToolIcon(ICON_RULES, "Rules", () => openRulesModal());
 headerTools.appendChild(profileToolBtn);
+headerTools.appendChild(settingsToolBtn);
 headerTools.appendChild(rulesToolBtn);
 
 header.appendChild(headerTitle);
@@ -499,22 +502,22 @@ startRoundBtn.className = "blue-button";
 actionRow.appendChild(startRoundBtn);
 actionRow.appendChild(copybtn);
 
-// Host setting: per-round time limit (seconds; 0 disables)
+// Host setting: per-round time limit (seconds; 0 disables).
+// Lives in the Settings modal (⚙) now — appended there when the modal is built.
 const timeLimitRow = document.createElement("div");
 Object.assign(timeLimitRow.style, {
-  display: "none",
+  display: "flex",
   width: "100%",
-  // Slightly tighter spacing vs the buttons above, while keeping space before "Leave Game"
-  marginTop: "-6px",
-  marginBottom: "12px",
+  marginTop: "0",
+  marginBottom: "4px",
   flexDirection: "column",
   alignItems: "flex-start",
   gap: "6px",
   padding: "6px 8px",
   borderRadius: "8px",
   background: "rgba(255,255,255,0.12)",
+  boxSizing: "border-box",
 });
-actionRow.appendChild(timeLimitRow);
 
 const timeLimitLabel = document.createElement("div");
 timeLimitLabel.textContent = "Set round time limit";
@@ -985,6 +988,29 @@ function openProfileModal() {
   loadMyStats().then(renderCareerStats).catch(() => {});
 }
 function closeProfileModal() { _profileModal.close(); }
+
+// ----------------------
+// SETTINGS MODAL (⚙)
+// Home for the host round-time presets (the timeLimitRow control, relocated from
+// the panel) and password-gated developer tools.
+const _settingsModal = createModal("Settings", 340);
+_settingsModal.body.appendChild(timeLimitRow);
+
+const _settingsTimeNote = document.createElement("div");
+_settingsTimeNote.textContent = "Applies to rounds you host.";
+Object.assign(_settingsTimeNote.style, { fontSize: "11px", color: "#5a4a00", marginTop: "4px", marginBottom: "16px" });
+_settingsModal.body.appendChild(_settingsTimeNote);
+
+const _settingsDevBtn = document.createElement("button");
+_settingsDevBtn.textContent = "Developer tools…";
+_settingsDevBtn.className = "blue-button";
+_settingsDevBtn.addEventListener("click", () => {
+  promptDebugPassword(() => { closeSettingsModal(); openDebugPanel(); });
+});
+_settingsModal.body.appendChild(_settingsDevBtn);
+
+function openSettingsModal() { _settingsModal.open(); }
+function closeSettingsModal() { _settingsModal.close(); }
 
 // ----------------------
 // DEBUG PANEL — Shift+click the header to open
@@ -2067,13 +2093,12 @@ function refreshStatusUI(snapshotGame) {
     }
   }
 
-  // Show host Start Round button if in lobby
+  // Show host Start Round button if in lobby. (The round time limit moved to the
+  // Settings modal, so it's no longer toggled here.)
   if (snapshotGame && snapshotGame.status === 'lobby' && role === 'host') {
     startRoundBtn.style.display = 'inline-block';
-    timeLimitRow.style.display = 'flex';
   } else {
     startRoundBtn.style.display = 'none';
-    timeLimitRow.style.display = 'none';
   }
 
   // Show "waiting for host" nudge to guests in the lobby
