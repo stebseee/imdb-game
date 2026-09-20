@@ -11,6 +11,7 @@ html{
     color: #fff;
     border: none;
     cursor: pointer;
+    vertical-align: middle; /* keep inline buttons aligned with the inline-flex copy group */
 }
 
 .blue-button:hover {
