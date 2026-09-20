@@ -502,7 +502,44 @@ const startRoundBtn = document.createElement("button");
 startRoundBtn.textContent = "Start Round";
 startRoundBtn.className = "blue-button";
 actionRow.appendChild(startRoundBtn);
-actionRow.appendChild(copybtn);
+
+// Copy Game Code + invite-link chain icon as one segmented control:
+// [ Copy Game Code | link ]. The chain button copies a share link that
+// auto-joins whoever opens it (if they have the extension).
+const ICON_LINK = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`;
+
+const copyGroup = document.createElement("div");
+Object.assign(copyGroup.style, { display: "inline-flex", alignItems: "stretch", verticalAlign: "middle", margin: "2px", marginBottom: "20px" });
+
+// Left segment: the existing Copy Game Code button, squared on its right edge.
+copybtn.style.margin = "0";
+copybtn.style.marginBottom = "0";
+copybtn.style.borderRadius = "6px 0 0 6px";
+copyGroup.appendChild(copybtn);
+
+// Right segment: the invite-link chain icon (thin divider between the two).
+const copyLinkBtn = document.createElement("button");
+copyLinkBtn.className = "blue-button";
+copyLinkBtn.id = "copyLinkBtn";
+copyLinkBtn.innerHTML = ICON_LINK;
+copyLinkBtn.title = "Copy invite link";
+copyLinkBtn.setAttribute("aria-label", "Copy invite link");
+Object.assign(copyLinkBtn.style, {
+  margin: "0", marginBottom: "0", borderRadius: "0 6px 6px 0",
+  borderLeft: "1px solid rgba(255,255,255,0.35)", padding: "6px 9px",
+  display: "inline-flex", alignItems: "center", justifyContent: "center",
+});
+copyLinkBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(`https://www.imdb.com/?game=${encodeURIComponent(gameId || '')}`);
+    showCopyOnButton("Link copied!", "green"); // feedback on the adjacent Copy button
+  } catch (err) {
+    showCopyOnButton("Failed!", "red");
+  }
+});
+copyGroup.appendChild(copyLinkBtn);
+
+actionRow.appendChild(copyGroup);
 
 // Host setting: per-round time limit (seconds; 0 disables).
 // Lives in the Settings modal (⚙) now — appended there when the modal is built.
