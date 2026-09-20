@@ -21,7 +21,7 @@
       }
     }
 
-    const stored = await storageGet(['playerId', 'gameId', 'actorPair', 'clicks', 'displayName', 'role', 'hasRedirected', 'finished', 'roundStartedAt', 'lastReadyAt', 'clickPath', 'panelCollapsed', 'roundTimeLimitSec', 'chatMinimised', 'chatLastSeenTime', 'toastedFinishers']);
+    const stored = await storageGet(['playerId', 'gameId', 'actorPair', 'clicks', 'displayName', 'role', 'hasRedirected', 'finished', 'roundStartedAt', 'lastReadyAt', 'clickPath', 'panelCollapsed', 'roundTimeLimitSec', 'chatMinimised', 'chatLastSeenTime', 'toastedFinishers', 'toastedGiveUps']);
     // Restore collapsed state before anything else renders
     if (stored.panelCollapsed) applyPanelCollapse(true);
     else applyPanelCollapse(false);
@@ -56,6 +56,7 @@
     if (stored.lastReadyAt) lastReadyAt = stored.lastReadyAt;
     if (stored.clickPath) clickPath = stored.clickPath;
     if (Array.isArray(stored.toastedFinishers)) _toastedFinishers = new Set(stored.toastedFinishers);
+    if (Array.isArray(stored.toastedGiveUps)) _toastedGiveUps = new Set(stored.toastedGiveUps);
     if (stored.roundTimeLimitSec !== undefined) {
       let sec = Number(stored.roundTimeLimitSec);
       if (!Number.isFinite(sec)) sec = 0;

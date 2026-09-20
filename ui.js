@@ -1703,6 +1703,52 @@ function showPenaltyToast() {
   setTimeout(() => toast.remove(), 3500);
 }
 
+// Give-up banner — same black banner as finishes, shown to other players when
+// someone gives up.
+function showGiveUpToast(playerName) {
+  const toast = document.createElement('div');
+  toast.textContent = `${playerName} has given up! 🏳️`;
+  toast.style.cssText = [
+    'position: fixed',
+    'top: 50%',
+    'left: 50%',
+    'transform: translate(-50%, -50%)',
+    'background: #222',
+    'color: #fff',
+    'padding: 16px 28px',
+    'border-radius: 8px',
+    'font-size: 18px',
+    'font-family: Arial, sans-serif',
+    'font-weight: 700',
+    'z-index: 2147483647',
+    'box-shadow: 0 6px 24px rgba(0,0,0,0.6)',
+    'pointer-events: none',
+    'white-space: nowrap',
+    'text-align: center',
+    'display: block'
+  ].join(' !important; ') + ' !important';
+  document.documentElement.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
+}
+
+// Briefly flash the browser tab title (then revert), so a player who tabbed away
+// notices key events (a player finished, the round ended). The original title is
+// captured once and restored after ~5s. main.js only reads document.title on page
+// LOAD (for click-path capture), so a temporary change here can't pollute it.
+let _origTabTitle = null;
+let _tabTitleTimer = null;
+function flashTabTitle(text) {
+  try {
+    if (_origTabTitle === null) _origTabTitle = document.title;
+    document.title = text;
+    if (_tabTitleTimer) clearTimeout(_tabTitleTimer);
+    _tabTitleTimer = setTimeout(() => {
+      if (_origTabTitle !== null) { document.title = _origTabTitle; _origTabTitle = null; }
+      _tabTitleTimer = null;
+    }, 5000);
+  } catch (e) { /* document.title always writable; guard just in case */ }
+}
+
 // ----------------------
 // UI helpers
 function formatDuration(ms) {

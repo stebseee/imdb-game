@@ -600,21 +600,38 @@ async function processSnapshot(snapshot) {
     }
   }
 
-  // Toast notifications for newly finished players (not yourself)
+  // Banners + tab-title flashes for OTHER players' key events (never your own).
   if (snapshot.status === 'active' || snapshot.status === 'finished') {
     for (const pid of playerIds) {
       if (pid === playerId) continue; // skip self
+      // Newly finished → finish banner + flash the tab title (in case you tabbed away).
       if (players[pid]?.finishedAt && !players[pid]?.gaveUp && !_toastedFinishers.has(pid)) {
         _toastedFinishers.add(pid);
         storageSet({ toastedFinishers: [..._toastedFinishers] }); // persist across page navigations
         const name = players[pid].name || pid;
         const c = Number(players[pid].clicks ?? 0);
         showFinishToast(name, c);
+        flashTabTitle(`🏆 ${name} finished — ${c} click${c === 1 ? '' : 's'}`);
       }
+      // Newly gave up DURING an active round → give-up banner. Gated to 'active'
+      // so timeout DNFs (which also set gaveUp at conclusion) don't spuriously
+      // announce everyone as "given up".
+      if (snapshot.status === 'active' && players[pid]?.gaveUp && !players[pid]?.finishedAt && !_toastedGiveUps.has(pid)) {
+        _toastedGiveUps.add(pid);
+        storageSet({ toastedGiveUps: [..._toastedGiveUps] });
+        showGiveUpToast(players[pid].name || pid);
+      }
+    }
+    // Round concluded (winner decided) → flash the tab title once per conclusion.
+    if (snapshot.status === 'finished' && snapshot.winner && snapshot.endedAt && snapshot.endedAt !== _flashedConclusionEndedAt) {
+      _flashedConclusionEndedAt = snapshot.endedAt;
+      const wname = players[snapshot.winner]?.name || snapshot.winner;
+      flashTabTitle(`🏁 ${wname} wins the round!`);
     }
   } else if (snapshot.status === 'lobby') {
     _toastedFinishers.clear();
-    storageSet({ toastedFinishers: [] }); // reset between rounds
+    _toastedGiveUps.clear();
+    storageSet({ toastedFinishers: [], toastedGiveUps: [] }); // reset between rounds
   }
 
   // Winner determination — any client can trigger this; _concluding prevents races
