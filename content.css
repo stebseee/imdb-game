@@ -17,8 +17,15 @@ html{
     background: #0f1655;
 }
 
-.danger-button:hover {
+/* Destructive buttons (Leave Game, Give Up) are red at rest, not just on hover,
+   so it's clear they're dangerous. This wins over .blue-button's background
+   because it's declared later with equal specificity. */
+.danger-button {
     background: #b91c1c;
+}
+
+.danger-button:hover {
+    background: #991b1b;
 }
 
 .yellow-button {

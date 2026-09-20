@@ -169,7 +169,7 @@ Object.assign(headerTools.style, { display: "flex", alignItems: "center", gap: "
 // (currentColor) — no emoji, no white background boxes.
 const ICON_STATS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><rect x="3" y="12" width="4.5" height="8" rx="1"/><rect x="9.75" y="7" width="4.5" height="13" rx="1"/><rect x="16.5" y="3" width="4.5" height="17" rx="1"/></svg>`;
 const ICON_RULES = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><text x="12" y="16.5" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor" font-family="Arial, sans-serif">?</text></svg>`;
-const ICON_SETTINGS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg>`;
+const ICON_SETTINGS = `<svg width="16" height="16" viewBox="-1 -1 26 26" overflow="visible" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15z"/></svg>`;
 
 function makeToolIcon(svgMarkup, label, onClick) {
   const el = document.createElement("span");
@@ -639,7 +639,7 @@ panelContent.appendChild(lobbyBox);
 const lobbyTitle = document.createElement("div");
 lobbyTitle.style.fontWeight = "600";
 lobbyTitle.style.marginBottom = "6px";
-lobbyTitle.textContent = "Lobby — Waiting for players";
+lobbyTitle.textContent = "Lobby";
 lobbyBox.appendChild(lobbyTitle);
 
 const playersList = document.createElement("div");
@@ -683,6 +683,9 @@ joinSubmit.textContent = "Join";
 joinSubmit.id = "joinSubmit";
 joinSubmit.className = "blue-button";
 joinRow.appendChild(joinSubmit);
+
+// Enter in the game-code field joins, same as clicking Join.
+joinInput.addEventListener("keydown", (e) => { if (e.key === "Enter") joinSubmit.click(); });
 
 // status text
 const statusDiv = document.createElement("div");
@@ -2078,7 +2081,7 @@ function refreshStatusUI(snapshotGame) {
         // Update lobby panel heading based on round state
         lobbyTitle.textContent = (snapshotGame && snapshotGame.status === 'active')
           ? "Leaderboard"
-          : "Lobby — Waiting for players";
+          : "Lobby";
 
         // Session tally in lobby — show if at least 1 round has been played
         const lobbyWins = snapshotGame?.wins || {};
@@ -2199,14 +2202,12 @@ function renderPlayersList(playersObj, gameStatus, isHost = false) {
       const dur = (base && p.finishedAt) ? formatDuration(p.finishedAt - base) : '';
       statusLabel = ` — ${p.clicks} clicks — finished${dur ? ` — ${dur}` : ''} ✅`;
     } else if (p.gaveUp) {
-      // include gaveUpAt if present
-      const gaveUpAt = p.gaveUpAt ? ` (${new Date(Number(p.gaveUpAt)).toLocaleTimeString()})` : '';
-      statusLabel = ` — GAVE UP${gaveUpAt} 🏳️`;
+      statusLabel = ` — GAVE UP 🏳️`;
       row.style.opacity = '0.6';
-    } else if (p.ready) {
-      statusLabel = " — READY ⏱️";
-      row.style.fontWeight = '600';
-    } else if (typeof p.clicks !== 'undefined') {
+    } else if (gameStatus !== 'lobby' && typeof p.clicks !== 'undefined') {
+      // Live click count during an active round. In the lobby (no round yet)
+      // clicks are meaningless, so rows show just the name. The READY label is
+      // gone with ready-up mode.
       statusLabel = ` — ${p.clicks} clicks`;
     }
 
