@@ -453,7 +453,10 @@ function renderChat(chatObj) {
 }
 
 async function sendChatMessage(directText) {
-  const text = directText || chatInput.value.trim();
+  // Only treat directText as the message when it's actually a string (e.g. an
+  // emoji). Anything else (a stray event object) falls back to the input value,
+  // so a bad caller can never store a non-string message again.
+  const text = (typeof directText === 'string' ? directText : chatInput.value.trim());
   if (!text || !gameId) return;
   if (!directText) { chatInput.value = ''; chatSendBtn.disabled = true; }
   const name = displayName || `Player-${playerId}`;
