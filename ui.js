@@ -1066,7 +1066,7 @@ Object.assign(gameModeRow.style, {
   padding: "6px 8px", borderRadius: "8px", background: "rgba(255,255,255,0.12)", boxSizing: "border-box",
 });
 const gameModeLabel = document.createElement("div");
-gameModeLabel.textContent = "Win rule";
+gameModeLabel.textContent = "Game mode";
 Object.assign(gameModeLabel.style, { fontSize: "13px", fontWeight: "800", color: "#000" });
 gameModeRow.appendChild(gameModeLabel);
 const gameModeHelper = document.createElement("div");
@@ -1079,7 +1079,7 @@ Object.assign(gameModeSelect.style, {
   borderRadius: "10px", border: "1px solid rgba(0,0,0,0.25)", outline: "none",
   background: "rgba(255,255,255,0.88)", color: "#000",
 });
-const gameModeOpts = { fewest: "Fewest clicks wins", fastest: "Fastest to finish wins" };
+const gameModeOpts = { fewest: "Fewest clicks wins (standard)", fastest: "Fastest to finish wins" };
 Object.keys(gameModeOpts).forEach(m => {
   const opt = document.createElement("option");
   opt.value = m; opt.textContent = gameModeOpts[m];
