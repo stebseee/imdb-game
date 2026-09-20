@@ -93,6 +93,7 @@ async function startRound() {
     winnerClicks: null,
     optimalPath: null,
     roundTimeLimitMs: roundTimeLimitMsToWrite,
+    gameMode: gameMode || 'fewest',
     endedAt: null,
     endedBy: null,
     participants
@@ -179,6 +180,37 @@ async function joinGameWithId(inputId) {
   }
 }
 
+// Pick the round winner among finished (non-gaveUp) players, per game mode:
+//   'fastest' → earliest finishedAt (first to reach the destination), any click count
+//   'fewest'  → fewest clicks, tie-broken by earliest finishedAt (default)
+// finishedPids: array of finisher pids. playersObj: pid -> player record.
+// Returns { winnerPid, winnerClicks } (winnerClicks = the winner's own click count).
+function pickRoundWinner(finishedPids, playersObj, mode) {
+  if (!finishedPids || finishedPids.length === 0) return { winnerPid: null, winnerClicks: null };
+  let winnerPid = null;
+  if (mode === 'fastest') {
+    let earliest = Infinity;
+    for (const pid of finishedPids) {
+      const ft = Number(playersObj[pid]?.finishedAt ?? Infinity);
+      if (ft < earliest) { earliest = ft; winnerPid = pid; }
+    }
+  } else {
+    let minClicks = Infinity;
+    for (const pid of finishedPids) {
+      const c = Number(playersObj[pid]?.clicks ?? Infinity);
+      if (c < minClicks) minClicks = c;
+    }
+    let earliest = Infinity;
+    for (const pid of finishedPids) {
+      const c = Number(playersObj[pid]?.clicks ?? Infinity);
+      const ft = Number(playersObj[pid]?.finishedAt ?? Infinity);
+      if (c === minClicks && ft < earliest) { earliest = ft; winnerPid = pid; }
+    }
+  }
+  if (!winnerPid) winnerPid = finishedPids[0];
+  return { winnerPid, winnerClicks: Number(playersObj[winnerPid]?.clicks ?? Infinity) };
+}
+
 async function giveUpGame() {
     if (!gameId || !confirm("Are you sure you want to give up? You will be excluded from winning.")) return;
     
@@ -215,30 +247,15 @@ async function giveUpGame() {
 
         // a) If all remaining (non-gave-up) players have finished, declare winner using tie-breaking logic
         if (finishedPlayers.length >= 1 && activePlayers.length === 0) {
-            let winnerPid = null;
-            let minClicks = Infinity;
-            for (const pid of finishedPlayers) {
-                const c = Number(players[pid]?.clicks ?? Infinity);
-                if (c < minClicks) minClicks = c;
-            }
-            let earliestFinishedAt = Infinity;
-            for (const pid of finishedPlayers) {
-                const c = Number(players[pid]?.clicks ?? Infinity);
-                const ft = Number(players[pid]?.finishedAt ?? Infinity);
-                if (c === minClicks && ft < earliestFinishedAt) {
-                    earliestFinishedAt = ft;
-                    winnerPid = pid;
-                }
-            }
-            if (!winnerPid) winnerPid = finishedPlayers[0]; // defensive fallback
+            const { winnerPid, winnerClicks } = pickRoundWinner(finishedPlayers, players, snapshot.gameMode);
 
             // Set winner and status
             await dbPatch(`${gameId}`, {
                 winner: winnerPid,
-                winnerClicks: minClicks,
+                winnerClicks,
                 status: "finished"
             });
-            console.log(`Game ended: ${winnerPid} won with ${minClicks} clicks.`);
+            console.log(`Game ended: ${winnerPid} won (${winnerClicks} clicks, mode=${snapshot.gameMode || 'fewest'}).`);
 
             // Update UI with the final state
             refreshStatusUI(await dbGet(`${gameId}`));
@@ -322,22 +339,9 @@ async function leaveGame(shouldRestart = false) {
         const remainingActive = remainingIds.filter(pid => !remainingPlayers[pid]?.finishedAt && !remainingPlayers[pid]?.gaveUp);
 
         if (remainingFinished.length >= 1 && remainingActive.length === 0) {
-          // All remaining players have finished — declare winner
-          let winnerPid = null, minClicks = Infinity, earliestFinishedAt = Infinity;
-          for (const pid of remainingFinished) {
-            const c = Number(remainingPlayers[pid]?.clicks ?? Infinity);
-            if (c < minClicks) minClicks = c;
-          }
-          for (const pid of remainingFinished) {
-            const c = Number(remainingPlayers[pid]?.clicks ?? Infinity);
-            const ft = Number(remainingPlayers[pid]?.finishedAt ?? Infinity);
-            if (c === minClicks && ft < earliestFinishedAt) {
-              earliestFinishedAt = ft;
-              winnerPid = pid;
-            }
-          }
-          if (!winnerPid) winnerPid = remainingFinished[0];
-          await dbPatch(`${leavingGameId}`, { winner: winnerPid, winnerClicks: minClicks, status: 'finished' });
+          // All remaining players have finished — declare winner (per game mode)
+          const { winnerPid, winnerClicks } = pickRoundWinner(remainingFinished, remainingPlayers, remainingGame.gameMode);
+          await dbPatch(`${leavingGameId}`, { winner: winnerPid, winnerClicks, status: 'finished' });
         }
         // If there are still active players remaining, polling on their end will handle conclusion
       }
@@ -662,27 +666,11 @@ async function processSnapshot(snapshot) {
       const endedAt = Date.now();
 
       let winnerPid = null;
-      let minClicks = null;
+      let winnerClicks = null;
       if (finishedPlayers.length > 0) {
-        minClicks = Infinity;
-        for (const pid of finishedPlayers) {
-          const c = Number(players[pid]?.clicks ?? Infinity);
-          if (c < minClicks) minClicks = c;
-        }
-
-        let earliestFinishedAt = Infinity;
-        for (const pid of finishedPlayers) {
-          const c  = Number(players[pid]?.clicks ?? Infinity);
-          const fa = Number(players[pid]?.finishedAt ?? Infinity);
-          if (c === minClicks && fa < earliestFinishedAt) {
-            earliestFinishedAt = fa;
-            winnerPid = pid;
-          }
-        }
-        if (!winnerPid) {
-          winnerPid = finishedPlayers[0];
-          minClicks = Number(players[winnerPid]?.clicks ?? Infinity);
-        }
+        const picked = pickRoundWinner(finishedPlayers, players, snapshot.gameMode);
+        winnerPid = picked.winnerPid;
+        winnerClicks = picked.winnerClicks;
       }
 
       // Mark any player who didn't finish (and didn't voluntarily give up) so they appear
@@ -713,7 +701,7 @@ async function processSnapshot(snapshot) {
         roundNum,
         winnerPid,
         winnerName: winnerPid ? (players[winnerPid]?.name || winnerPid) : null,
-        winnerClicks: winnerPid ? minClicks : null,
+        winnerClicks: winnerPid ? winnerClicks : null,
         players: roundPlayerSummary,
         concludedAt: endedAt,
       };
@@ -730,7 +718,7 @@ async function processSnapshot(snapshot) {
       // Write game state — mark optimalPath as loading so clients show a spinner
       await dbPatch(`${gameId}`, {
         winner: winnerPid,
-        winnerClicks: minClicks,
+        winnerClicks,
         status: 'finished',
         startedAt: null,
         endedAt,
@@ -739,7 +727,7 @@ async function processSnapshot(snapshot) {
         optimalPath: { loading: true },
       });
       if (winnerPid) {
-        console.log(`Winner: ${winnerPid} in ${minClicks} clicks (Round ${roundNum})`);
+        console.log(`Winner: ${winnerPid} (${winnerClicks} clicks, mode=${snapshot.gameMode || 'fewest'}) (Round ${roundNum})`);
       } else {
         console.log(`Round ended by timeout with no finishers (Round ${roundNum})`);
       }

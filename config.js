@@ -42,6 +42,7 @@ let optimalPathRoundKey = null; // `${gameId}_${startedAt}` — prevents re-fetc
 let optimalPathResult = null;   // null | 'loading' | { path, actorClicks, oracleUrl } | { error, oracleUrl }
 let roundIsActive = false;      // true only while a game round is status='active'; gates page filters
 let hostRoundTimeLimitSec = 300; // host-configured per-round limit (seconds; presets only)
+let gameMode = 'fewest';       // host-configured win rule: 'fewest' (clicks) | 'fastest' (to finish)
 let roundTimeLimitMs = null;   // round-configured for the currently active round
 let _chatMinimised = true;     // chat panel collapse state (starts minimised)
 let _chatUnread = 0;           // unread count — messages from others not yet seen

@@ -21,7 +21,7 @@
       }
     }
 
-    const stored = await storageGet(['playerId', 'gameId', 'actorPair', 'clicks', 'displayName', 'role', 'hasRedirected', 'finished', 'roundStartedAt', 'lastReadyAt', 'clickPath', 'panelCollapsed', 'roundTimeLimitSec', 'chatMinimised', 'chatLastSeenTime', 'toastedFinishers', 'toastedGiveUps']);
+    const stored = await storageGet(['playerId', 'gameId', 'actorPair', 'clicks', 'displayName', 'role', 'hasRedirected', 'finished', 'roundStartedAt', 'lastReadyAt', 'clickPath', 'panelCollapsed', 'roundTimeLimitSec', 'gameMode', 'chatMinimised', 'chatLastSeenTime', 'toastedFinishers', 'toastedGiveUps']);
     // Restore collapsed state before anything else renders
     if (stored.panelCollapsed) applyPanelCollapse(true);
     else applyPanelCollapse(false);
@@ -77,6 +77,14 @@
       }
 
       if (timeLimitSelect) timeLimitSelect.value = String(hostRoundTimeLimitSec);
+    }
+
+    // Restore game mode (win rule)
+    if (stored.gameMode === 'fastest' || stored.gameMode === 'fewest') {
+      gameMode = stored.gameMode;
+    }
+    if (typeof gameModeSelect !== 'undefined' && gameModeSelect) {
+      gameModeSelect.value = (gameMode === 'fastest') ? 'fastest' : 'fewest';
     }
 
     // Title page tracking: if the player navigated to a movie/TV show page mid-round,
