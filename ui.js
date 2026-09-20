@@ -127,7 +127,7 @@ chatHeader.addEventListener('click', () => {
 });
 
 // Send on button click or Enter key
-chatSendBtn.addEventListener('click', (e) => sendChatMessage(e)); // wrapped: sendChatMessage lives in game.js (loads after ui.js); bare ref would ReferenceError at attach time
+chatSendBtn.addEventListener('click', () => sendChatMessage()); // no arg: the click event must NOT be passed as the message (that stored the event object → "[object Object]"). Wrapped because sendChatMessage lives in game.js (loads after ui.js).
 chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendChatMessage(); });
 chatInput.addEventListener('input', () => { chatSendBtn.disabled = chatInput.value.trim() === ''; });
 
