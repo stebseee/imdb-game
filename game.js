@@ -517,7 +517,7 @@ async function processSnapshot(snapshot) {
       _statsRecordedEndedAt = statsEndedAt;
       const nameOf = {};
       for (const pid of playerIds) nameOf[pid] = players[pid]?.name || `Player-${pid}`;
-      recordRoundStats({ participantPids: playerIds, winnerPid: snapshot.winner || null, nameOf });
+      recordRoundStats({ participantPids: playerIds, winnerPid: snapshot.winner || null, nameOf, gameMode: snapshot.gameMode });
     }
     _statsWitnessedActive = false;
     // Every client refreshes its own career line once per finished round.

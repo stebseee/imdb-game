@@ -981,6 +981,50 @@ _profileIdentity.appendChild(_profileAvatar);
 _profileIdentity.appendChild(nameEditContainer);
 _profileModal.body.appendChild(_profileIdentity);
 
+// Mode toggle: All · Fewest · Fastest. Switches which figures the cards + h2h
+// below show — the overall totals ('all'), or one byMode bucket. It only
+// re-renders the last-loaded stats object, so flipping tabs never re-fetches.
+const STATS_VIEW_MODES = [
+  { key: "all",     label: "All" },
+  { key: "fewest",  label: "Fewest" },
+  { key: "fastest", label: "Fastest" },
+];
+let _statsViewMode = "all";
+let _lastLoadedStats = null;
+const _statsModeRow = document.createElement("div");
+Object.assign(_statsModeRow.style, {
+  display: "flex", gap: "4px", background: "rgba(0,0,0,0.06)", borderRadius: "8px",
+  padding: "3px", marginBottom: "14px",
+});
+const _statsModeButtons = {};
+STATS_VIEW_MODES.forEach(({ key, label }) => {
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  Object.assign(btn.style, {
+    flex: "1", border: "none", borderRadius: "6px", padding: "6px 4px", cursor: "pointer",
+    fontSize: "12px", fontWeight: "700", background: "transparent", color: "#5a4a00",
+    transition: "background 0.12s, color 0.12s",
+  });
+  btn.addEventListener("click", () => {
+    if (_statsViewMode === key) return;
+    _statsViewMode = key;
+    _syncStatsModeButtons();
+    renderCareerStats(_lastLoadedStats);
+  });
+  _statsModeButtons[key] = btn;
+  _statsModeRow.appendChild(btn);
+});
+function _syncStatsModeButtons() {
+  STATS_VIEW_MODES.forEach(({ key }) => {
+    const on = key === _statsViewMode;
+    const btn = _statsModeButtons[key];
+    btn.style.background = on ? "#3E49AD" : "transparent";
+    btn.style.color = on ? "#F5C518" : "#5a4a00";
+  });
+}
+_syncStatsModeButtons();
+_profileModal.body.appendChild(_statsModeRow);
+
 // Metric cards: wins / losses / win rate
 function _makeStatCard(label, accent) {
   const card = document.createElement("div");
@@ -1031,9 +1075,20 @@ function _initials(name) {
 }
 
 // Populate the profile modal from a /players/{id} stats object (or null).
+// Renders the OVERALL totals when the mode toggle is on "all", or the selected
+// byMode bucket ('fewest'|'fastest') otherwise. Caches the stats object so the
+// toggle can re-render without a re-fetch.
 function renderCareerStats(stats) {
-  const wins   = Number(stats?.totalWins   ?? 0);
-  const rounds = Number(stats?.totalRounds ?? 0);
+  _lastLoadedStats = stats || null;
+
+  // Pick the bucket the toggle asks for. For a per-mode view the figures live
+  // under byMode.<mode>; a missing bucket just reads as an all-zero source.
+  const source = _statsViewMode === "all"
+    ? stats
+    : (stats && stats.byMode && typeof stats.byMode === "object" ? stats.byMode[_statsViewMode] : null);
+
+  const wins   = Number(source?.totalWins   ?? 0);
+  const rounds = Number(source?.totalRounds ?? 0);
   const losses = Math.max(0, rounds - wins);
   const pct = rounds ? Math.round((wins / rounds) * 100) : 0;
   _winsCard.val.textContent = String(wins);
@@ -1042,7 +1097,7 @@ function renderCareerStats(stats) {
 
   // Head-to-head rows, sorted by most games played
   _h2hList.innerHTML = "";
-  const vs = (stats && stats.vs && typeof stats.vs === "object") ? stats.vs : {};
+  const vs = (source && source.vs && typeof source.vs === "object") ? source.vs : {};
   const rows = Object.keys(vs).map((oppId) => {
     const r = vs[oppId] || {};
     return { name: r.lastName || `Player-${oppId}`, wins: Number(r.wins || 0), losses: Number(r.losses || 0) };
@@ -1051,7 +1106,13 @@ function renderCareerStats(stats) {
 
   if (rows.length === 0) {
     const empty = document.createElement("div");
-    empty.textContent = rounds ? "No head-to-head record yet." : "No games yet — play a round to start your record.";
+    // A per-mode view with no rounds gets its own copy — this mode just hasn't
+    // been played yet, which is different from having no record at all.
+    if (_statsViewMode !== "all" && rounds === 0) {
+      empty.textContent = "No games in this mode yet.";
+    } else {
+      empty.textContent = rounds ? "No head-to-head record yet." : "No games yet — play a round to start your record.";
+    }
     Object.assign(empty.style, { padding: "10px 12px", fontSize: "13px", color: "#5a4a00" });
     _h2hList.appendChild(empty);
     return;
@@ -1081,6 +1142,8 @@ function openProfileModal() {
   // syncs the panel chip.
   _profileAvatar.textContent = _initials(displayName);
   setNameEditMode(false);
+  _statsViewMode = "all";       // always open on the overall view
+  _syncStatsModeButtons();
   _profileModal.open();
   loadMyStats().then(renderCareerStats).catch(() => {});
 }
