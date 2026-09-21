@@ -348,7 +348,7 @@ roundTimerDiv.id = "roundTimer";
 const roundInfoDiv = document.createElement("div");
 roundInfoDiv.id = "roundInfo";
 Object.assign(roundInfoDiv.style, {
-  display: "none", fontSize: "13px", marginTop: "0", marginBottom: "10px",
+  display: "none", fontSize: "13px", marginTop: "10px", marginBottom: "10px",
 }, MODE_INFO_CARD_STYLE());
 
 // Mode + time-limit labels reused across the lobby chip, the in-round line, and
