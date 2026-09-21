@@ -985,7 +985,7 @@ startBtn.addEventListener("click", async () => {
 });
 
 joinBtn.addEventListener("click", () => {
-  joinRow.style.display = joinRow.style.display === "none" ? "block" : "none";
+  joinRow.style.display = joinRow.style.display === "none" ? "flex" : "none";
 });
 
 joinSubmit.addEventListener("click", async () => {

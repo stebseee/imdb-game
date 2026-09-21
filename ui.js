@@ -349,13 +349,15 @@ const roundInfoDiv = document.createElement("div");
 roundInfoDiv.id = "roundInfo";
 Object.assign(roundInfoDiv.style, {
   display: "none", fontSize: "13px", fontWeight: "700", color: "#000",
-  marginTop: "0", marginBottom: "8px",
+  marginTop: "0", marginBottom: "8px", lineHeight: "1.5",
 });
 
-// Short, friendly labels for the mode + time limit, reused across the lobby chip,
-// the in-round line, and the winners board so the wording stays consistent.
+// Mode + time-limit labels reused across the lobby chip, the in-round line, and
+// the winners board so the wording stays consistent. The mode names match the
+// Settings "Game mode" dropdown exactly. (Kept self-contained so it's safe to
+// call during early init, before gameModeOpts is defined.)
 function gameModeLabelShort(mode) {
-  return mode === 'fastest' ? 'Fastest to finish' : 'Fewest clicks';
+  return mode === 'fastest' ? 'Fastest to finish wins' : 'Fewest clicks wins (standard)';
 }
 function timeLimitLabelFromMs(ms) {
   const n = Number(ms);
@@ -669,7 +671,9 @@ timerChip.appendChild(timerChipCog);
 function syncTimerChip() {
   const label = timeLimitPresetsLabel[hostRoundTimeLimitSec] || `${Math.round(hostRoundTimeLimitSec / 60)} min`;
   const modeLabel = gameModeLabelShort(gameMode);
-  timerChipText.textContent = `Mode: ${modeLabel} · Round limit: ${label}`;
+  // Two stacked lines: game mode, then round limit.
+  timerChipText.innerHTML =
+    `<div>Game mode: ${modeLabel}</div><div>Round limit: ${label}</div>`;
 }
 syncTimerChip();
 timerChip.addEventListener("click", () => openSettingsModal());
@@ -762,16 +766,17 @@ roundTimerDiv.before(roundInfoDiv);
 // join controls (enter game id)
 const joinRow = document.createElement("div");
 joinRow.style.display = "none";
-joinRow.style.marginTop = "8px";
+// Flex row with centered items so the field and button line up vertically. (The
+// culprit was .blue-button's margin-bottom:20px pushing the button up; we zero
+// the button's margin here and let `gap` handle spacing.)
+Object.assign(joinRow.style, { marginTop: "8px", alignItems: "center", gap: "6px" });
 panelContent.appendChild(joinRow);
 
 const joinInput = document.createElement("input");
 joinInput.placeholder = "Enter Game ID";
-// box-sizing + vertical-align:middle keep the field lined up with the Join button
-// (.blue-button is vertical-align:middle; without matching it, the input drifts).
 Object.assign(joinInput.style, {
-  padding: "6px 8px", width: "160px", marginRight: "6px",
-  boxSizing: "border-box", verticalAlign: "middle",
+  padding: "6px 8px", width: "160px", margin: "0",
+  boxSizing: "border-box",
   border: "1px solid rgba(0,0,0,0.25)", borderRadius: "6px", fontSize: "14px",
 });
 joinRow.appendChild(joinInput);
@@ -780,6 +785,7 @@ const joinSubmit = document.createElement("button");
 joinSubmit.textContent = "Join";
 joinSubmit.id = "joinSubmit";
 joinSubmit.className = "blue-button";
+joinSubmit.style.margin = "0"; // drop .blue-button's asymmetric margin so it centers with the field
 joinRow.appendChild(joinSubmit);
 
 // Enter in the game-code field joins, same as clicking Join.
@@ -2068,12 +2074,12 @@ function refreshStatusUI(snapshotGame) {
   if (snapshotGame && (snapshotGame.status === 'lobby' || snapshotGame.status === 'active')) {
     const mode = gameModeLabelShort(snapshotGame.gameMode || 'fewest');
     if (snapshotGame.status === 'active') {
-      roundInfoDiv.textContent = `Mode: ${mode}`;
+      roundInfoDiv.innerHTML = `<div>Game mode: ${mode}</div>`;
       roundInfoDiv.style.display = 'block';
     } else if (role !== 'host') {
-      // Guest in the lobby: show mode + the host's chosen time limit from the snapshot.
+      // Guest in the lobby: mode + the host's chosen time limit, on two stacked lines.
       const limit = timeLimitLabelFromMs(snapshotGame.roundTimeLimitMs);
-      roundInfoDiv.textContent = `Mode: ${mode} · Round limit: ${limit}`;
+      roundInfoDiv.innerHTML = `<div>Game mode: ${mode}</div><div>Round limit: ${limit}</div>`;
       roundInfoDiv.style.display = 'block';
     } else {
       roundInfoDiv.style.display = 'none'; // host lobby → timerChip covers it
@@ -2126,7 +2132,7 @@ function refreshStatusUI(snapshotGame) {
     // Mode label above the leaderboard, so the results make sense at a glance
     // (e.g. why a higher click-count won under "Fastest to finish").
     const modeHeader = document.createElement('div');
-    modeHeader.textContent = `Mode: ${gameModeLabelShort(snapshotGame.gameMode || 'fewest')}`;
+    modeHeader.textContent = `Game mode: ${gameModeLabelShort(snapshotGame.gameMode || 'fewest')}`;
     Object.assign(modeHeader.style, {
       fontSize: '12px', fontWeight: '700', color: '#f5c518',
       marginBottom: '8px', opacity: '0.9',
