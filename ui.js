@@ -341,6 +341,28 @@ nameInput.addEventListener("keydown", (e) => {
 const roundTimerDiv = document.createElement("div");
 roundTimerDiv.id = "roundTimer";
 
+// Round-info line (game mode, plus the time limit while in the lobby). Shown to
+// EVERYONE — host and guests — so the mode and limit are clear before a round
+// starts and during it. Populated/toggled by refreshStatusUI. During an active
+// round it shows just the mode; the live countdown stays in roundTimerDiv.
+const roundInfoDiv = document.createElement("div");
+roundInfoDiv.id = "roundInfo";
+Object.assign(roundInfoDiv.style, {
+  display: "none", fontSize: "13px", fontWeight: "700", color: "#000",
+  marginTop: "0", marginBottom: "8px",
+});
+
+// Short, friendly labels for the mode + time limit, reused across the lobby chip,
+// the in-round line, and the winners board so the wording stays consistent.
+function gameModeLabelShort(mode) {
+  return mode === 'fastest' ? 'Fastest to finish' : 'Fewest clicks';
+}
+function timeLimitLabelFromMs(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n <= 0) return 'No time limit';
+  return timeLimitPresetsLabel[Math.round(n / 1000)] || `${Math.round(n / 60000)} min`;
+}
+
 // --- WINNER MESSAGE CONTAINER ---
 const winnerBox = document.createElement("div");
 winnerBox.id = "winnerbox";
@@ -619,6 +641,12 @@ timeLimitSelect.addEventListener("change", async () => {
   timeLimitSelect.value = String(hostRoundTimeLimitSec);
   await storageSet({ roundTimeLimitSec: hostRoundTimeLimitSec });
   syncTimerChip();
+  // If the host changes it while sitting in a lobby, push it to the game node so
+  // guests' round-info line updates before the round starts.
+  if (gameId && role === 'host') {
+    const ms = hostRoundTimeLimitSec > 0 ? hostRoundTimeLimitSec * 1000 : null;
+    dbPatch(gameId, { roundTimeLimitMs: ms }).catch(() => {});
+  }
 });
 
 // Panel round-timer chip — shows the current limit (default 5 min) and opens the
@@ -640,7 +668,8 @@ Object.assign(timerChipCog.style, { display: "inline-flex", alignItems: "center"
 timerChip.appendChild(timerChipCog);
 function syncTimerChip() {
   const label = timeLimitPresetsLabel[hostRoundTimeLimitSec] || `${Math.round(hostRoundTimeLimitSec / 60)} min`;
-  timerChipText.textContent = `Round limit: ${label}`;
+  const modeLabel = gameModeLabelShort(gameMode);
+  timerChipText.textContent = `Mode: ${modeLabel} · Round limit: ${label}`;
 }
 syncTimerChip();
 timerChip.addEventListener("click", () => openSettingsModal());
@@ -725,8 +754,10 @@ Object.assign(lobbyWaitingDiv.style, {
 lobbyWaitingDiv.textContent = '⏳ Waiting for host to start the round…';
 lobbyBox.appendChild(lobbyWaitingDiv);
 
-// Insert the round timer below the nameRow and above lobbyBox
+// Insert the round timer below the nameRow and above lobbyBox, with the
+// round-info line (mode / limit) sitting just above the timer.
 nameRow.after(roundTimerDiv);
+roundTimerDiv.before(roundInfoDiv);
 
 // join controls (enter game id)
 const joinRow = document.createElement("div");
@@ -736,7 +767,13 @@ panelContent.appendChild(joinRow);
 
 const joinInput = document.createElement("input");
 joinInput.placeholder = "Enter Game ID";
-Object.assign(joinInput.style, { padding: "6px", width: "160px", marginRight: "6px" });
+// box-sizing + vertical-align:middle keep the field lined up with the Join button
+// (.blue-button is vertical-align:middle; without matching it, the input drifts).
+Object.assign(joinInput.style, {
+  padding: "6px 8px", width: "160px", marginRight: "6px",
+  boxSizing: "border-box", verticalAlign: "middle",
+  border: "1px solid rgba(0,0,0,0.25)", borderRadius: "6px", fontSize: "14px",
+});
 joinRow.appendChild(joinInput);
 
 const joinSubmit = document.createElement("button");
@@ -1182,6 +1219,11 @@ gameModeSelect.addEventListener("change", async () => {
   gameMode = (gameModeSelect.value === 'fastest') ? 'fastest' : 'fewest';
   gameModeSelect.value = gameMode;
   await storageSet({ gameMode });
+  syncTimerChip(); // host's lobby chip shows the mode too
+  // Push the mode to the lobby node so guests' round-info line reflects it now.
+  if (gameId && role === 'host') {
+    dbPatch(gameId, { gameMode }).catch(() => {});
+  }
 });
 _settingsModal.body.appendChild(gameModeRow);
 
@@ -2017,6 +2059,29 @@ function refreshStatusUI(snapshotGame) {
     }
   }
 
+  // ROUND-INFO LINE (game mode + limit). Visible to everyone so the mode/limit
+  // are clear before and during a round. In the lobby the host uses the
+  // interactive timerChip instead (it shows the same thing + a cog), so we only
+  // show this line to guests there. During an active round we show just the mode
+  // (the live countdown is roundTimerDiv). On the winners board the mode appears
+  // above the leaderboard, so this line hides.
+  if (snapshotGame && (snapshotGame.status === 'lobby' || snapshotGame.status === 'active')) {
+    const mode = gameModeLabelShort(snapshotGame.gameMode || 'fewest');
+    if (snapshotGame.status === 'active') {
+      roundInfoDiv.textContent = `Mode: ${mode}`;
+      roundInfoDiv.style.display = 'block';
+    } else if (role !== 'host') {
+      // Guest in the lobby: show mode + the host's chosen time limit from the snapshot.
+      const limit = timeLimitLabelFromMs(snapshotGame.roundTimeLimitMs);
+      roundInfoDiv.textContent = `Mode: ${mode} · Round limit: ${limit}`;
+      roundInfoDiv.style.display = 'block';
+    } else {
+      roundInfoDiv.style.display = 'none'; // host lobby → timerChip covers it
+    }
+  } else {
+    roundInfoDiv.style.display = 'none';
+  }
+
   // If the game is in lobby mode, reset redirect flag so participants will redirect on the next start
   if (snapshotGame && snapshotGame.status === 'lobby') {
     hasRedirected = false;
@@ -2057,6 +2122,16 @@ function refreshStatusUI(snapshotGame) {
       });
 
     leaderboardList.innerHTML = '';
+
+    // Mode label above the leaderboard, so the results make sense at a glance
+    // (e.g. why a higher click-count won under "Fastest to finish").
+    const modeHeader = document.createElement('div');
+    modeHeader.textContent = `Mode: ${gameModeLabelShort(snapshotGame.gameMode || 'fewest')}`;
+    Object.assign(modeHeader.style, {
+      fontSize: '12px', fontWeight: '700', color: '#f5c518',
+      marginBottom: '8px', opacity: '0.9',
+    });
+    leaderboardList.appendChild(modeHeader);
 
     if (finishedPlayers.length > 0) {
       // Prefer server-declared winner if present and valid, otherwise fall back to sorted list

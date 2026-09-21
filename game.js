@@ -119,6 +119,10 @@ async function createGameAndStart() {
     status: "lobby",
     winner: null,
     winnerClicks: null,
+    // Publish the host's current mode + time limit onto the lobby so guests can
+    // see them before the round starts (startRound writes them again per round).
+    gameMode: gameMode || 'fewest',
+    roundTimeLimitMs: hostRoundTimeLimitSec > 0 ? hostRoundTimeLimitSec * 1000 : null,
     createdAt: now
   };
 
