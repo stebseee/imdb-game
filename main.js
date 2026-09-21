@@ -46,10 +46,8 @@
 
     // Load persistent career stats (survives across sessions) and render them.
     // The /players node is seeded on name-save and updated each round, so we only
-    // READ here — no per-navigation write. migrateStatsToByMode() runs a one-time
-    // backfill of pre-Phase-7 history into the "fewest" bucket (idempotent) and
-    // returns the node so we render it directly without a second fetch.
-    migrateStatsToByMode().then(renderCareerStats).catch(() => {});
+    // READ here — no per-navigation write.
+    loadMyStats().then(renderCareerStats).catch(() => {});
 
     if (stored.role) role = stored.role;
     if (stored.hasRedirected) hasRedirected = stored.hasRedirected;

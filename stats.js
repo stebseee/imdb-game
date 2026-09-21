@@ -18,11 +18,11 @@
 //   }
 //   win% = totalWins / totalRounds
 //
-// Migration is clean: existing nodes keep totalWins/totalRounds/vs as the overall
-// figures; byMode simply doesn't exist for rounds played before Phase 7, and every
-// round from now increments BOTH the overall totals and its matching byMode bucket
-// in the same atomic fan-out. A mode with no games has no byMode.<mode> node — the
-// UI reads that as "no games in this mode yet".
+// Stats start fresh at the 2.0 release (the old /players data was cleared), so
+// every player begins at 0 W/L. From the first round on, each concluded round
+// increments BOTH the overall totals and its matching byMode bucket in the same
+// atomic fan-out. A mode with no games yet has no byMode.<mode> node — the UI
+// reads that as "no games in this mode yet".
 //
 // Identity: keyed on getStatsId() — TODAY the browser-local playerId, so history
 // persists per browser. This single seam lets a future real login swap in a
@@ -32,7 +32,7 @@
 // restrict a client to writing only its own node — any authed client can write
 // any /players node. Acceptable for a friends game; tighten once login exists.
 
-const STATS_SCHEMA_VERSION = 2; // v2: per-mode byMode buckets + one-time fewest backfill
+const STATS_SCHEMA_VERSION = 2; // v2: per-mode byMode buckets (2.0 release, fresh start)
 const PLAYERS_ROOT = `${FIREBASE_DB_URL}/players`;
 const _fbIncrement = { ".sv": { "increment": 1 } }; // server-side atomic +1
 
@@ -83,66 +83,6 @@ async function touchMyStats() {
     });
   } catch (e) {
     console.warn('[Stats] Could not touch career stats', e);
-  }
-}
-
-// One-time backfill: attribute a player's pre-Phase-7 career into the "fewest"
-// bucket. Before per-mode tracking existed every round was fewest-clicks, so all
-// the overall history that isn't already accounted for under byMode.fastest is
-// treated as fewest. Runs once per player node (gated by migratedToByModeV2),
-// on load, keyed on the player's OWN node — each browser migrates itself. It's
-// idempotent (absolute values, guard flag), so re-running changes nothing.
-// Returns the (possibly updated) stats node so the caller can render it directly.
-async function migrateStatsToByMode() {
-  try {
-    const id = getStatsId();
-    if (!id) return null;
-    const node = await playersGet(id);
-    if (!node || typeof node !== 'object') return node;   // no record yet — nothing to do
-    if (node.migratedToByModeV2) return node;             // already backfilled
-
-    const overallWins   = Number(node.totalWins   || 0);
-    const overallRounds = Number(node.totalRounds || 0);
-    const fastest       = (node.byMode && node.byMode.fastest) || {};
-    const fastestWins   = Number(fastest.totalWins   || 0);
-    const fastestRounds = Number(fastest.totalRounds || 0);
-
-    // fewest = everything not already attributed to fastest (clamped at 0).
-    const fewestWins   = Math.max(0, overallWins   - fastestWins);
-    const fewestRounds = Math.max(0, overallRounds - fastestRounds);
-
-    // Head-to-head: overall minus fastest, per opponent.
-    const overallVs = (node.vs && typeof node.vs === 'object') ? node.vs : {};
-    const fastestVs = (fastest.vs && typeof fastest.vs === 'object') ? fastest.vs : {};
-    const fewestVs = {};
-    for (const opp of Object.keys(overallVs)) {
-      const o = overallVs[opp] || {};
-      const f = fastestVs[opp] || {};
-      const w = Math.max(0, Number(o.wins   || 0) - Number(f.wins   || 0));
-      const l = Math.max(0, Number(o.losses || 0) - Number(f.losses || 0));
-      if (w || l) fewestVs[opp] = { wins: w, losses: l, lastName: o.lastName || `Player-${opp}` };
-    }
-
-    const update = { migratedToByModeV2: true, schemaVersion: STATS_SCHEMA_VERSION };
-    // Only create the fewest bucket if there's actually history to attribute.
-    if (fewestRounds > 0 || fewestWins > 0 || Object.keys(fewestVs).length) {
-      const bucket = { totalWins: fewestWins, totalRounds: fewestRounds };
-      if (Object.keys(fewestVs).length) bucket.vs = fewestVs;
-      update['byMode/fewest'] = bucket;   // deep multi-path key — replaces only fewest
-    }
-    await playersPatch(id, update);
-
-    // Mirror the write onto the in-memory node so the caller renders it without a re-fetch.
-    node.migratedToByModeV2 = true;
-    node.schemaVersion = STATS_SCHEMA_VERSION;
-    if (update['byMode/fewest']) {
-      node.byMode = node.byMode || {};
-      node.byMode.fewest = update['byMode/fewest'];
-    }
-    return node;
-  } catch (e) {
-    console.warn('[Stats] Could not backfill fewest-mode stats', e);
-    return null;
   }
 }
 
