@@ -348,9 +348,8 @@ roundTimerDiv.id = "roundTimer";
 const roundInfoDiv = document.createElement("div");
 roundInfoDiv.id = "roundInfo";
 Object.assign(roundInfoDiv.style, {
-  display: "none", fontSize: "13px", fontWeight: "700", color: "#000",
-  marginTop: "0", marginBottom: "8px", lineHeight: "1.5",
-});
+  display: "none", fontSize: "13px", marginTop: "0", marginBottom: "10px",
+}, MODE_INFO_CARD_STYLE());
 
 // Mode + time-limit labels reused across the lobby chip, the in-round line, and
 // the winners board so the wording stays consistent. The mode names match the
@@ -363,6 +362,28 @@ function timeLimitLabelFromMs(ms) {
   const n = Number(ms);
   if (!Number.isFinite(n) || n <= 0) return 'No time limit';
   return timeLimitPresetsLabel[Math.round(n / 1000)] || `${Math.round(n / 60000)} min`;
+}
+
+// Shared "info card" look for the lobby mode/limit blocks — a subtle indigo tint
+// with a rounded border, so the block reads as distinct from the surrounding text.
+function MODE_INFO_CARD_STYLE() {
+  return {
+    background: "rgba(62,73,173,0.08)",
+    border: "1px solid rgba(62,73,173,0.20)",
+    borderRadius: "8px",
+    padding: "8px 11px",
+  };
+}
+// Renders "Label — value" rows: muted label, bold brand-coloured value, with
+// vertical padding between rows so the block breathes instead of reading as one
+// clump of small bold text. `pairs` is an array of [label, value].
+function modeLimitLinesHtml(pairs) {
+  return pairs.map(([label, value], i) =>
+    `<div style="padding:${i === 0 ? '0' : '5px'} 0 ${i === pairs.length - 1 ? '0' : '5px'};">` +
+      `<span style="color:#5a4a00;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">${label}</span>` +
+      `<div style="color:#3E49AD;font-weight:800;font-size:14px;line-height:1.25;">${value}</div>` +
+    `</div>`
+  ).join('');
 }
 
 // --- WINNER MESSAGE CONTAINER ---
@@ -656,24 +677,26 @@ timeLimitSelect.addEventListener("change", async () => {
 // hunting through a menu. Shown to the host in the lobby (see updateGameControls).
 const timerChip = document.createElement("div");
 Object.assign(timerChip.style, {
-  display: "none", alignItems: "center", gap: "6px", cursor: "pointer",
-  marginTop: "2px", marginBottom: "10px", fontSize: "13px", fontWeight: "700", color: "#000",
-});
+  display: "none", alignItems: "flex-start", justifyContent: "space-between",
+  gap: "8px", cursor: "pointer", marginTop: "2px", marginBottom: "10px",
+}, MODE_INFO_CARD_STYLE());
 timerChip.setAttribute("role", "button");
 timerChip.setAttribute("tabindex", "0");
-timerChip.title = "Round settings";
+timerChip.title = "Round settings — click to change";
 const timerChipText = document.createElement("span");
+timerChipText.style.flex = "1";
 timerChip.appendChild(timerChipText);
 const timerChipCog = document.createElement("span");
 timerChipCog.innerHTML = ICON_SETTINGS;
-Object.assign(timerChipCog.style, { display: "inline-flex", alignItems: "center", color: "#000" });
+Object.assign(timerChipCog.style, { display: "inline-flex", alignItems: "center", color: "#3E49AD", flexShrink: "0", marginTop: "1px" });
 timerChip.appendChild(timerChipCog);
 function syncTimerChip() {
   const label = timeLimitPresetsLabel[hostRoundTimeLimitSec] || `${Math.round(hostRoundTimeLimitSec / 60)} min`;
   const modeLabel = gameModeLabelShort(gameMode);
-  // Two stacked lines: game mode, then round limit.
-  timerChipText.innerHTML =
-    `<div>Game mode: ${modeLabel}</div><div>Round limit: ${label}</div>`;
+  timerChipText.innerHTML = modeLimitLinesHtml([
+    ["Game mode", modeLabel],
+    ["Round limit", label],
+  ]);
 }
 syncTimerChip();
 timerChip.addEventListener("click", () => openSettingsModal());
@@ -2074,12 +2097,15 @@ function refreshStatusUI(snapshotGame) {
   if (snapshotGame && (snapshotGame.status === 'lobby' || snapshotGame.status === 'active')) {
     const mode = gameModeLabelShort(snapshotGame.gameMode || 'fewest');
     if (snapshotGame.status === 'active') {
-      roundInfoDiv.innerHTML = `<div>Game mode: ${mode}</div>`;
+      roundInfoDiv.innerHTML = modeLimitLinesHtml([["Game mode", mode]]);
       roundInfoDiv.style.display = 'block';
     } else if (role !== 'host') {
-      // Guest in the lobby: mode + the host's chosen time limit, on two stacked lines.
+      // Guest in the lobby: mode + the host's chosen time limit, as an info card.
       const limit = timeLimitLabelFromMs(snapshotGame.roundTimeLimitMs);
-      roundInfoDiv.innerHTML = `<div>Game mode: ${mode}</div><div>Round limit: ${limit}</div>`;
+      roundInfoDiv.innerHTML = modeLimitLinesHtml([
+        ["Game mode", mode],
+        ["Round limit", limit],
+      ]);
       roundInfoDiv.style.display = 'block';
     } else {
       roundInfoDiv.style.display = 'none'; // host lobby → timerChip covers it
