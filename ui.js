@@ -1966,6 +1966,7 @@ let _origTabTitle = null;
 let _tabTitleTimer = null;
 function flashTabTitle(text) {
   try {
+    if (_countdownTitleActive) return; // the final-30s countdown owns the tab title
     if (_origTabTitle === null) _origTabTitle = document.title;
     document.title = text;
     if (_tabTitleTimer) clearTimeout(_tabTitleTimer);
@@ -1974,6 +1975,47 @@ function flashTabTitle(text) {
       _tabTitleTimer = null;
     }, 5000);
   } catch (e) { /* document.title always writable; guard just in case */ }
+}
+
+// Live final-30s countdown in the browser tab, so a player who tabbed away sees
+// the clock ticking down. Takes over the tab title while active (see the guard in
+// flashTabTitle) and restores the page's own title when it ends.
+let _countdownTitleActive = false;
+function setCountdownTitle(remainingMs) {
+  try {
+    if (_origTabTitle === null) _origTabTitle = document.title; // capture the page's title once
+    if (_tabTitleTimer) { clearTimeout(_tabTitleTimer); _tabTitleTimer = null; } // cancel any flash revert
+    document.title = `⏳ ${formatDuration(remainingMs)} left!`;
+    _countdownTitleActive = true;
+  } catch (e) { /* guard */ }
+}
+function clearCountdownTitle() {
+  if (!_countdownTitleActive) return;
+  try {
+    if (_origTabTitle !== null) { document.title = _origTabTitle; _origTabTitle = null; }
+  } catch (e) { /* guard */ }
+  _countdownTitleActive = false;
+}
+
+// Paints the in-panel round timer each tick: counts up (no limit) or down (limit).
+// In the final 30s the number turns red and a live countdown runs in the tab title.
+const ROUND_TIMER_URGENT_MS = 30000;
+function paintRoundTimer() {
+  if (!roundStartedAt) return;
+  if (roundTimeLimitMs) {
+    const remainingMs = Math.max(0, roundTimeLimitMs - (Date.now() - roundStartedAt));
+    roundTimerDiv.textContent = `Time left: ${formatDuration(remainingMs)}`;
+    const urgent = remainingMs <= ROUND_TIMER_URGENT_MS;
+    roundTimerDiv.style.color = urgent ? '#c0392b' : '';
+    roundTimerDiv.style.fontWeight = urgent ? '800' : '';
+    if (urgent && remainingMs > 0) setCountdownTitle(remainingMs);
+    else clearCountdownTitle(); // >30s left, or time's up → restore the tab title
+  } else {
+    roundTimerDiv.textContent = `Time: ${formatDuration(Date.now() - roundStartedAt)}`;
+    roundTimerDiv.style.color = '';
+    roundTimerDiv.style.fontWeight = '';
+    clearCountdownTitle();
+  }
 }
 
 // ----------------------
@@ -2044,27 +2086,16 @@ function refreshStatusUI(snapshotGame) {
     roundTimerDiv.style.display = 'block';
     // Start the smooth tick if not already running
     if (!_timerInterval) {
-      _timerInterval = setInterval(() => {
-        if (roundStartedAt) {
-          if (roundTimeLimitMs) {
-            const remainingMs = Math.max(0, roundTimeLimitMs - (Date.now() - roundStartedAt));
-            roundTimerDiv.textContent = `Time left: ${formatDuration(remainingMs)}`;
-          } else {
-            roundTimerDiv.textContent = `Time: ${formatDuration(Date.now() - roundStartedAt)}`;
-          }
-        }
-      }, 1000);
+      _timerInterval = setInterval(paintRoundTimer, 1000);
     }
     // Stamp immediately so there's no 1s delay on first display
-    if (roundTimeLimitMs) {
-      const remainingMs = Math.max(0, roundTimeLimitMs - (Date.now() - roundStartedAt));
-      roundTimerDiv.textContent = `Time left: ${formatDuration(remainingMs)}`;
-    } else {
-      roundTimerDiv.textContent = `Time: ${formatDuration(Date.now() - roundStartedAt)}`;
-    }
+    paintRoundTimer();
   } else {
     // Stop the tick whenever the round isn't active
     if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
+    clearCountdownTitle();          // drop any live tab countdown
+    roundTimerDiv.style.color = ''; // clear the red urgency colour
+    roundTimerDiv.style.fontWeight = '';
 
     if (snapshotGame && snapshotGame.status === 'finished' && roundStartedAt) {
       // Show the frozen final time on the leaderboard
