@@ -381,7 +381,7 @@ function modeLimitLinesHtml(pairs) {
   return pairs.map(([label, value], i) =>
     `<div style="padding:${i === 0 ? '0' : '5px'} 0 ${i === pairs.length - 1 ? '0' : '5px'};">` +
       `<span style="color:#5a4a00;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;">${label}</span>` +
-      `<div style="color:#3E49AD;font-weight:800;font-size:14px;line-height:1.25;">${value}</div>` +
+      `<div style="color:#000;font-weight:800;font-size:14px;line-height:1.25;">${value}</div>` +
     `</div>`
   ).join('');
 }
@@ -526,19 +526,22 @@ copybtn.addEventListener("click", async () => {
   }
 });
 
+const COPY_BTN_LABEL = "Copy Game Code"; // resting label to revert to
+let _copyResetTimer = null;
 function showCopyOnButton(text, color) {
-  // Save original state
-  const originalText = copybtn.textContent;
-  const originalColor = copybtn.style.backgroundColor;
+  // Clear any pending revert so overlapping clicks can't capture the green
+  // "Copied!" state as the baseline (that was leaving it stuck green).
+  if (_copyResetTimer) { clearTimeout(_copyResetTimer); _copyResetTimer = null; }
 
-  // Apply feedback
   copybtn.textContent = text;
   copybtn.style.backgroundColor = color;
 
-  // Reset after 2 seconds
-  setTimeout(() => {
-    copybtn.textContent = originalText;
-    copybtn.style.backgroundColor = originalColor;
+  // Always revert to the KNOWN resting state (label + CSS .blue-button colour),
+  // never to whatever the button happened to show when this was called.
+  _copyResetTimer = setTimeout(() => {
+    copybtn.textContent = COPY_BTN_LABEL;
+    copybtn.style.backgroundColor = "";
+    _copyResetTimer = null;
   }, 2000);
 }
 
@@ -688,7 +691,7 @@ timerChipText.style.flex = "1";
 timerChip.appendChild(timerChipText);
 const timerChipCog = document.createElement("span");
 timerChipCog.innerHTML = ICON_SETTINGS;
-Object.assign(timerChipCog.style, { display: "inline-flex", alignItems: "center", color: "#3E49AD", flexShrink: "0", marginTop: "1px" });
+Object.assign(timerChipCog.style, { display: "inline-flex", alignItems: "center", color: "#000", flexShrink: "0", marginTop: "1px" });
 timerChip.appendChild(timerChipCog);
 function syncTimerChip() {
   const label = timeLimitPresetsLabel[hostRoundTimeLimitSec] || `${Math.round(hostRoundTimeLimitSec / 60)} min`;
