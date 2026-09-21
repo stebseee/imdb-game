@@ -981,48 +981,36 @@ _profileIdentity.appendChild(_profileAvatar);
 _profileIdentity.appendChild(nameEditContainer);
 _profileModal.body.appendChild(_profileIdentity);
 
-// Mode toggle: All · Fewest · Fastest. Switches which figures the cards + h2h
-// below show — the overall totals ('all'), or one byMode bucket. It only
-// re-renders the last-loaded stats object, so flipping tabs never re-fetches.
+// Mode filter dropdown: which figures the cards + head-to-head below show —
+// the overall totals ("All modes"), or one byMode bucket. Uses the same mode
+// names as the Settings "Game mode" selector so the wording stays consistent.
+// Changing it only re-renders the last-loaded stats object — never re-fetches.
 const STATS_VIEW_MODES = [
-  { key: "all",     label: "All" },
-  { key: "fewest",  label: "Fewest" },
-  { key: "fastest", label: "Fastest" },
+  { key: "all",     label: "All modes" },
+  { key: "fewest",  label: "Fewest clicks wins (standard)" },
+  { key: "fastest", label: "Fastest to finish wins" },
 ];
 let _statsViewMode = "all";
 let _lastLoadedStats = null;
 const _statsModeRow = document.createElement("div");
-Object.assign(_statsModeRow.style, {
-  display: "flex", gap: "4px", background: "rgba(0,0,0,0.06)", borderRadius: "8px",
-  padding: "3px", marginBottom: "14px",
+Object.assign(_statsModeRow.style, { marginBottom: "14px" });
+const _statsModeSelect = document.createElement("select");
+Object.assign(_statsModeSelect.style, {
+  width: "100%", padding: "8px 10px", fontSize: "13px", borderRadius: "10px",
+  border: "1px solid rgba(0,0,0,0.25)", outline: "none",
+  background: "rgba(255,255,255,0.88)", color: "#000",
 });
-const _statsModeButtons = {};
 STATS_VIEW_MODES.forEach(({ key, label }) => {
-  const btn = document.createElement("button");
-  btn.textContent = label;
-  Object.assign(btn.style, {
-    flex: "1", border: "none", borderRadius: "6px", padding: "6px 4px", cursor: "pointer",
-    fontSize: "12px", fontWeight: "700", background: "transparent", color: "#5a4a00",
-    transition: "background 0.12s, color 0.12s",
-  });
-  btn.addEventListener("click", () => {
-    if (_statsViewMode === key) return;
-    _statsViewMode = key;
-    _syncStatsModeButtons();
-    renderCareerStats(_lastLoadedStats);
-  });
-  _statsModeButtons[key] = btn;
-  _statsModeRow.appendChild(btn);
+  const opt = document.createElement("option");
+  opt.value = key; opt.textContent = label;
+  _statsModeSelect.appendChild(opt);
 });
-function _syncStatsModeButtons() {
-  STATS_VIEW_MODES.forEach(({ key }) => {
-    const on = key === _statsViewMode;
-    const btn = _statsModeButtons[key];
-    btn.style.background = on ? "#3E49AD" : "transparent";
-    btn.style.color = on ? "#F5C518" : "#5a4a00";
-  });
-}
-_syncStatsModeButtons();
+_statsModeSelect.value = _statsViewMode;
+_statsModeSelect.addEventListener("change", () => {
+  _statsViewMode = _statsModeSelect.value;
+  renderCareerStats(_lastLoadedStats);
+});
+_statsModeRow.appendChild(_statsModeSelect);
 _profileModal.body.appendChild(_statsModeRow);
 
 // Metric cards: wins / losses / win rate
@@ -1142,8 +1130,8 @@ function openProfileModal() {
   // syncs the panel chip.
   _profileAvatar.textContent = _initials(displayName);
   setNameEditMode(false);
-  _statsViewMode = "all";       // always open on the overall view
-  _syncStatsModeButtons();
+  _statsViewMode = "all";          // always open on the overall view
+  _statsModeSelect.value = "all";  // reset the dropdown to match
   _profileModal.open();
   loadMyStats().then(renderCareerStats).catch(() => {});
 }
