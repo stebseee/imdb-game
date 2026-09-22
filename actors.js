@@ -136,12 +136,13 @@ const STATIC_ACTOR_LIST = [
   { name: "Tom Hiddleston", url: "https://www.imdb.com/name/nm1089991/" },
   { name: "Salma Hayek", url: "https://www.imdb.com/name/nm0000161/" },
   { name: "Antonio Banderas", url: "https://www.imdb.com/name/nm0000104/" },
-  { name: "Eva Green", url: "https://www.imdb.com/name/nm1200692/" },
   { name: "Rachel McAdams", url: "https://www.imdb.com/name/nm1046097/" },
   { name: "Anne Hathaway", url: "https://www.imdb.com/name/nm0004266/" },
   { name: "Jennifer Lawrence", url: "https://www.imdb.com/name/nm2225369/" },
   { name: "Scarlett Johansson", url: "https://www.imdb.com/name/nm0424060/" },
   { name: "Octavia Spencer", url: "https://www.imdb.com/name/nm0818055/" },
+  { name: "Leo Woodall", url: "https://www.imdb.com/name/nm10695146/" },
+
 
   // Franchise / blockbuster connectors (useful for short paths)
   { name: "Tom Cruise", url: "https://www.imdb.com/name/nm0000129/" },
@@ -176,8 +177,6 @@ const STATIC_ACTOR_LIST = [
   { name: "Naomi Watts", url: "https://www.imdb.com/name/nm0915208/" },
   { name: "Keira Knightley", url: "https://www.imdb.com/name/nm0461136/" },
   { name: "Kirsten Dunst", url: "https://www.imdb.com/name/nm0000379/" },
-  { name: "Juliette Binoche", url: "https://www.imdb.com/name/nm0000300/" },
-  { name: "Isabelle Huppert", url: "https://www.imdb.com/name/nm0001376/" },
   { name: "Eddie Murphy", url: "https://www.imdb.com/name/nm0000552/" },
   { name: "Jamie Foxx", url: "https://www.imdb.com/name/nm0004937/" },
 
@@ -188,27 +187,17 @@ const STATIC_ACTOR_LIST = [
   { name: "Dev Patel", url: "https://www.imdb.com/name/nm2353862/" },
   { name: "Brie Larson", url: "https://www.imdb.com/name/nm0488953/" },
   { name: "Daniel Kaluuya", url: "https://www.imdb.com/name/nm2257207/" },
-  { name: "Ariana DeBose", url: "https://www.imdb.com/name/nm3663196/" },
   { name: "Chadwick Boseman", url: "https://www.imdb.com/name/nm1569276/" },
-  { name: "Troy Kotsur", url: "https://www.imdb.com/name/nm1319274/" },
   { name: "Jessie Buckley", url: "https://www.imdb.com/name/nm2976580/" },
   { name: "Steven Yeun", url: "https://www.imdb.com/name/nm3081796/" },
   { name: "John David Washington", url: "https://www.imdb.com/name/nm0913475/" },
   { name: "Riz Ahmed", url: "https://www.imdb.com/name/nm1981893/" },
-  { name: "Youn Yuh-jung", url: "https://www.imdb.com/name/nm0950926/" },
-  { name: "Danielle Deadwyler", url: "https://www.imdb.com/name/nm4314990/" },
-  { name: "Taraji P. Henson", url: "https://www.imdb.com/name/nm0378245/" },
-  { name: "Keke Palmer", url: "https://www.imdb.com/name/nm1551130/" },
-  { name: "Sterling K. Brown", url: "https://www.imdb.com/name/nm1250791/" },
   { name: "Jonathan Bailey", url: "https://www.imdb.com/name/nm0047332/" },
   { name: "Awkwafina", url: "https://www.imdb.com/name/nm5377144/" },
   { name: "Hailee Steinfeld", url: "https://www.imdb.com/name/nm2794962/" },
   { name: "Naomie Harris", url: "https://www.imdb.com/name/nm0365140/" },
   { name: "Michael Shannon", url: "https://www.imdb.com/name/nm0788335/" },
   { name: "Guy Pearce", url: "https://www.imdb.com/name/nm0001602/" },
-  { name: "Monica Barbaro", url: "https://www.imdb.com/name/nm4834815/" },
-  { name: "Fernanda Torres", url: "https://www.imdb.com/name/nm0868639/" },
-  { name: "Isabela Merced", url: "https://www.imdb.com/name/nm5097044/" },
 
   // Franchise / MCU / blockbuster connectors (additions)
   { name: "Tom Holland", url: "https://www.imdb.com/name/nm4043618/" },
@@ -217,18 +206,19 @@ const STATIC_ACTOR_LIST = [
   { name: "Gal Gadot", url: "https://www.imdb.com/name/nm2933757/" },
   { name: "Jason Momoa", url: "https://www.imdb.com/name/nm0597388/" },
   { name: "Tessa Thompson", url: "https://www.imdb.com/name/nm1935086/" },
-  { name: "Letitia Wright", url: "https://www.imdb.com/name/nm4004793/" },
   { name: "Anthony Mackie", url: "https://www.imdb.com/name/nm1107001/" },
   { name: "Don Cheadle", url: "https://www.imdb.com/name/nm0000332/" },
   { name: "Paul Rudd", url: "https://www.imdb.com/name/nm0748620/" },
   { name: "Jeremy Renner", url: "https://www.imdb.com/name/nm0719637/" },
   { name: "Simu Liu", url: "https://www.imdb.com/name/nm4855517/" },
   { name: "Ryan Reynolds", url: "https://www.imdb.com/name/nm0005351/" },
+  { name: "Sadie Sink", url: "https://www.imdb.com/name/nm5584750/" },
+  { name: "Millie Bobby Brown", url: "https://www.imdb.com/name/nm5611121/" },
+
 
   // Succession cast (note: Kieran Culkin & Jeremy Strong already listed above)
   { name: "Brian Cox", url: "https://www.imdb.com/name/nm0004051/" },
   { name: "Sarah Snook", url: "https://www.imdb.com/name/nm3512758/" },
   { name: "Matthew Macfadyen", url: "https://www.imdb.com/name/nm0532193/" },
   { name: "Nicholas Braun", url: "https://www.imdb.com/name/nm1002609/" },
-  { name: "J. Smith-Cameron", url: "https://www.imdb.com/name/nm0810397/" },
 ];
