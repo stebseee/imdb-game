@@ -582,12 +582,20 @@ Object.assign(copyLinkBtn.style, {
 });
 copyLinkBtn.addEventListener("click", async () => {
   try {
-    await navigator.clipboard.writeText(`https://www.imdb.com/?game=${encodeURIComponent(gameId || '')}`);
+    await navigator.clipboard.writeText(buildInviteLink(gameId));
     showCopyOnButton("Link copied!", "green"); // feedback on the adjacent Copy button
   } catch (err) {
     showCopyOnButton("Failed!", "red");
   }
 });
+// Build the share link. Prefer the invite landing page (rich preview when pasted
+// into a chat); fall back to the bare imdb.com auto-join link if none is set.
+function buildInviteLink(code) {
+  const enc = encodeURIComponent(code || '');
+  return INVITE_BASE_URL
+    ? `${INVITE_BASE_URL}?game=${enc}`
+    : `https://www.imdb.com/?game=${enc}`;
+}
 copyGroup.appendChild(copyLinkBtn);
 
 actionRow.appendChild(copyGroup);

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<!-- ============================================================
+     LINK-PREVIEW METADATA (Open Graph + Twitter)
+     These tags are what chat apps (WhatsApp, Slack, Discord, iMessage,
+     Facebook, X, …) read to build the preview card when this link is pasted.
+     They MUST be static (crawlers don't run JavaScript) and use ABSOLUTE URLs.
+     If you host this page somewhere other than GitHub Pages, change the domain
+     in og:url and og:image below (and INVITE_BASE_URL in config.js) to match.
+     ============================================================ -->
+<title>IMDB Click Race — You've been challenged!</title>
+<meta name="description" content="Think you can beat me? Race from one actor to another using only IMDb links — fewest clicks wins. Tap to jump straight into the round." />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="IMDB Click Race" />
+<meta property="og:title" content="🎬 You've been challenged to IMDB Click Race!" />
+<meta property="og:description" content="Race from one actor to another using only IMDb links — fewest clicks (or fastest) wins. Tap to join the round and prove you know your movies." />
+<meta property="og:url" content="https://stebseee.github.io/imdb-game/invite.html" />
+<meta property="og:image" content="https://stebseee.github.io/imdb-game/icon128.png" />
+
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="🎬 You've been challenged to IMDB Click Race!" />
+<meta name="twitter:description" content="Race from one actor to another using only IMDb links — fewest clicks wins. Tap to join the round." />
+<meta name="twitter:image" content="https://stebseee.github.io/imdb-game/icon128.png" />
+
+<style>
+  :root { --imdb-yellow: #F5C518; --indigo: #3E49AD; --ink: #12121a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #ffe27a 0%, var(--imdb-yellow) 45%, #d9ad10 100%);
+    color: var(--ink);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; min-height: 100%;
+  }
+  .card {
+    width: 100%; max-width: 440px; background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(0,0,0,0.12); border-radius: 18px;
+    padding: 28px 24px 24px; text-align: center;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.22);
+  }
+  .badge {
+    display: inline-block; background: var(--ink); color: var(--imdb-yellow);
+    font-weight: 800; font-size: 13px; letter-spacing: 0.5px;
+    padding: 6px 12px; border-radius: 6px; margin-bottom: 16px;
+  }
+  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 10px; }
+  p.lead { font-size: 15px; line-height: 1.5; color: #33333a; margin: 0 0 20px; }
+  .code-wrap { margin: 0 0 22px; }
+  .code-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #6a6a55; font-weight: 700; }
+  .code {
+    font-size: 34px; font-weight: 800; letter-spacing: 4px; color: var(--indigo);
+    margin-top: 4px; font-variant-numeric: tabular-nums;
+  }
+  .btn {
+    display: block; width: 100%; text-decoration: none; cursor: pointer;
+    background: var(--indigo); color: #fff; font-size: 18px; font-weight: 800;
+    padding: 14px 16px; border-radius: 12px; border: none;
+    transition: background 0.15s, transform 0.05s;
+  }
+  .btn:hover { background: #2c3690; }
+  .btn:active { transform: translateY(1px); }
+  .how { margin-top: 18px; font-size: 12.5px; line-height: 1.55; color: #4a4a40; }
+  .how a { color: var(--indigo); font-weight: 700; }
+  .rules { margin: 18px 0 0; padding: 14px 16px; background: rgba(62,73,173,0.08);
+           border: 1px solid rgba(62,73,173,0.18); border-radius: 12px; text-align: left; }
+  .rules h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; margin: 0 0 8px; color: #5a4a00; }
+  .rules ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: #33333a; }
+  .foot { margin-top: 16px; font-size: 11px; color: #6a6a55; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <span class="badge">🎬 IMDB CLICK RACE</span>
+    <h1>You've been challenged!</h1>
+    <p class="lead">Race from one actor to another using <strong>only IMDb links</strong> — no search bar, no cheating. Fewest clicks (or fastest to arrive) wins the round.</p>
+
+    <div class="code-wrap" id="codeWrap" hidden>
+      <div class="code-label">Game code</div>
+      <div class="code" id="code">—</div>
+    </div>
+
+    <a class="btn" id="playBtn" href="https://www.imdb.com/">▶ Join the round</a>
+
+    <div class="rules">
+      <h2>How it works</h2>
+      <ol>
+        <li>You start on one actor's IMDb page.</li>
+        <li>Click through movies &amp; cast to reach the target actor.</li>
+        <li>Fewest clicks wins — beat your challenger!</li>
+      </ol>
+    </div>
+
+    <p class="how" id="howTo">
+      First time? You'll need the free <strong>IMDB Click Race</strong> Chrome extension, then click the button above.
+      <span id="storeWrap" hidden><br /><a id="storeLink" href="#" target="_blank" rel="noopener">Get the extension →</a></span>
+    </p>
+
+    <p class="foot">Open on a desktop Chrome browser to play.</p>
+  </main>
+
+<script>
+  // Read the ?game=CODE param and wire up the page. (This JS is for humans who
+  // open the link — chat-app crawlers only read the static meta tags above.)
+  (function () {
+    // Optional: once the extension is published, put its Chrome Web Store URL here
+    // to show a "Get the extension" link to first-timers.
+    var STORE_URL = "";
+
+    var params = new URLSearchParams(window.location.search);
+    var raw = (params.get("game") || "").trim().toUpperCase();
+    var code = raw.replace(/[^A-Z0-9]/g, "").slice(0, 12); // sanitise
+
+    var playBtn = document.getElementById("playBtn");
+    if (code) {
+      document.getElementById("code").textContent = code;
+      document.getElementById("codeWrap").hidden = false;
+      playBtn.href = "https://www.imdb.com/?game=" + encodeURIComponent(code);
+    } else {
+      // No code — still let them head to IMDb (they can enter a code in the panel).
+      playBtn.href = "https://www.imdb.com/";
+    }
+
+    if (STORE_URL) {
+      var link = document.getElementById("storeLink");
+      link.href = STORE_URL;
+      document.getElementById("storeWrap").hidden = false;
+    }
+  })();
+</script>
+</body>
+</html>

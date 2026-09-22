@@ -6,6 +6,16 @@
 
 const FIREBASE_DB_URL = "https://imdb-game-343f1-default-rtdb.firebaseio.com"; // Corrected URL
 const GAMES_ROOT = `${FIREBASE_DB_URL}/games`;
+
+// Invite landing page — the URL the "copy invite link" button shares. It points
+// at a small page WE control (invite.html) so pasted links get a rich preview
+// card (see the OG tags in invite.html); that page then sends the player to
+// imdb.com/?game=CODE, where the existing auto-join takes over. Leave it "" to
+// fall back to sharing the bare imdb.com link (no custom preview).
+// To host on your own domain instead, set this to that page's URL, e.g.
+// "https://yourdomain.com/imdb-invite.html", and update the og:url/og:image
+// domains inside invite.html to match.
+const INVITE_BASE_URL = "https://stebseee.github.io/imdb-game/invite.html";
 const FIREBASE_API_KEY = "AIzaSyBLyKiLclFPaOz7kwGbMUMrw88hvEGIIak"; // Firebase Web API Key
 //THIS IS THE FED BRANCH
 // STATIC_ACTOR_LIST is defined in actors.js, which is loaded before this file.
