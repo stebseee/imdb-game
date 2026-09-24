@@ -1095,9 +1095,13 @@ function _makeStatCard(label, accent) {
   const val = document.createElement("div");
   val.textContent = "0";
   Object.assign(val.style, { fontSize: "22px", fontWeight: "700", color: accent ? "#F5C518" : "#000" });
+  // Optional small line under the value (used by win rate for the round count).
+  const sub = document.createElement("div");
+  Object.assign(sub.style, { fontSize: "10px", marginTop: "1px", color: accent ? "#cdd2f2" : "#5a4a00" });
   card.appendChild(lab);
   card.appendChild(val);
-  return { card, val };
+  card.appendChild(sub);
+  return { card, val, sub };
 }
 const _cardsRow = document.createElement("div");
 Object.assign(_cardsRow.style, { display: "flex", gap: "6px", marginBottom: "16px" });
@@ -1157,6 +1161,8 @@ function renderCareerStats(stats) {
   _lossesCard.val.textContent = String(losses);
   _giveUpsCard.val.textContent = String(giveUps);
   _rateCard.val.textContent = rounds ? pct + "%" : "—";
+  // Show the sample size so a 100% after one round reads as what it is.
+  _rateCard.sub.textContent = rounds ? `${rounds} round${rounds === 1 ? "" : "s"}` : "";
 
   // Head-to-head rows, sorted by most games played
   _h2hList.innerHTML = "";
