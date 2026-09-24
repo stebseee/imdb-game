@@ -96,6 +96,9 @@ async function startRound() {
     gameMode: gameMode || 'fewest',
     endedAt: null,
     endedBy: null,
+    // Marks this round as tracked by the persisted "recorded once" logic below,
+    // so rounds from before that fix are never counted a second time.
+    statsTracked: true,
     participants
   });
 
@@ -509,21 +512,31 @@ async function processSnapshot(snapshot) {
   const currentPlayer = players[playerId];
 
   // --- Career stats: record each round exactly once ---
-  // Driven by OBSERVING the finished state, not by the conclude race (which any
-  // client can win, so recording there double-counts). Only the host writes, so
-  // there's a single writer regardless of who concluded. _statsWitnessedActive
-  // stops a page loaded straight into a finished round from re-counting it.
-  if (snapshot.status === 'active') {
-    _statsWitnessedActive = true;
-  } else if (snapshot.status === 'finished' && snapshot.endedAt) {
+  // The host records when it OBSERVES the finished state. "Already recorded" is
+  // persisted on the game node (statsRecordedEndedAt), not kept in page memory:
+  // every IMDb navigation reloads this script, and when the host's own finishing
+  // click is what ends the round, they land on a fresh page that loads straight
+  // into 'finished'. The old in-memory "saw it while active" guard silently
+  // skipped exactly those rounds. statsTracked (set in startRound) restricts this
+  // to rounds started by this version, so older rounds aren't counted twice.
+  if (snapshot.status === 'finished' && snapshot.endedAt) {
     const statsEndedAt = snapshot.endedAt;
-    if (role === 'host' && _statsWitnessedActive && statsEndedAt !== _statsRecordedEndedAt) {
-      _statsRecordedEndedAt = statsEndedAt;
+    if (role === 'host' && snapshot.statsTracked &&
+        snapshot.statsRecordedEndedAt !== statsEndedAt &&
+        statsEndedAt !== _statsRecordedEndedAt) {
+      _statsRecordedEndedAt = statsEndedAt; // same-page dedupe while the flag write is in flight
+      // Count only players who were in this round (not someone who joined mid-round).
+      const roundMap = snapshot.participants || {};
+      const roundPids = Object.keys(roundMap).filter(pid => roundMap[pid] && players[pid]);
+      const participantPids = roundPids.length ? roundPids : playerIds;
       const nameOf = {};
-      for (const pid of playerIds) nameOf[pid] = players[pid]?.name || `Player-${pid}`;
-      recordRoundStats({ participantPids: playerIds, winnerPid: snapshot.winner || null, nameOf, gameMode: snapshot.gameMode });
+      for (const pid of participantPids) nameOf[pid] = players[pid]?.name || `Player-${pid}`;
+      // Claim the round first so a later page load can never record it again.
+      dbPatch(`${gameId}`, { statsRecordedEndedAt: statsEndedAt })
+        .then(() => recordRoundStats({ participantPids, winnerPid: snapshot.winner || null, nameOf, gameMode: snapshot.gameMode }))
+        .then(() => { if (participantPids.includes(playerId)) return loadMyStats().then(renderCareerStats); })
+        .catch(e => console.warn('[Stats] Could not record round', e));
     }
-    _statsWitnessedActive = false;
     // Every client refreshes its own career line once per finished round.
     if (statsEndedAt !== _statsRefreshedEndedAt) {
       _statsRefreshedEndedAt = statsEndedAt;
