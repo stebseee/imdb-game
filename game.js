@@ -230,59 +230,13 @@ async function giveUpGame() {
         const gaveUpAt = Date.now();
         await dbPatch(`${gameId}/players/${playerId}`, { gaveUp: true, finishedAt: null, name: displayName, gaveUpAt });
 
-        // 2. Fetch the updated game state
-        const snapshot = await dbGet(`${gameId}`);
-        const players = snapshot?.players || {};
-        const playerIds = Object.keys(players);
-        
-        // 3. Check for automatic game end 
-        // Only consider players who DID NOT give up when checking finishers
-        const finishedPlayers = playerIds.filter(pid => 
-            players[pid] && players[pid].finishedAt && !players[pid].gaveUp
-        );
-        const giveUpNow = Date.now();
-        const activePlayers = playerIds.filter(pid => {
-            if (!players[pid] || players[pid].finishedAt || players[pid].gaveUp) return false;
-            const lastSeen = Number(players[pid].lastSeen) || 0;
-            const sinceStart = snapshot?.startedAt ? (giveUpNow - snapshot.startedAt) : 0;
-            if (lastSeen === 0 && sinceStart < 10000) return true;
-            return (giveUpNow - lastSeen) < 10000;
-        });
-        const gaveUpPlayers = playerIds.filter(pid =>
-            players[pid] && players[pid].gaveUp
-        );
-
-        // a) If all remaining (non-gave-up) players have finished, declare winner using tie-breaking logic
-        if (finishedPlayers.length >= 1 && activePlayers.length === 0) {
-            const { winnerPid, winnerClicks } = pickRoundWinner(finishedPlayers, players, snapshot.gameMode);
-
-            // Set winner and status
-            await dbPatch(`${gameId}`, {
-                winner: winnerPid,
-                winnerClicks,
-                status: "finished"
-            });
-            console.log(`Game ended: ${winnerPid} won (${winnerClicks} clicks, mode=${snapshot.gameMode || 'fewest'}).`);
-
-            // Update UI with the final state
-            refreshStatusUI(await dbGet(`${gameId}`));
-            return;
-        }
-
-        // b) If there are NO finishers and NO active players, everyone gave up -> end the game so clients show gave-up board
-        if (finishedPlayers.length === 0 && activePlayers.length === 0 && gaveUpPlayers.length > 0) {
-            await dbPatch(`${gameId}`, {
-              winner: null,
-              winnerClicks: null,
-              status: "finished"
-            });
-            console.log(`All players gave up; ending game and showing gave-up board.`);
-            refreshStatusUI(await dbGet(`${gameId}`));
-            return;
-        }
-
-        // else: just update the UI with the 'gave up' status
-        refreshStatusUI(snapshot); 
+        // 2. Refresh the UI. If this give-up leaves nobody racing, the round is
+        // ended by processSnapshot's single conclusion path, which runs on every
+        // client (this one included) when the change streams in. That path sets
+        // endedAt, round history and session wins, so career stats record it.
+        // (This used to end the round here without endedAt, so give-up rounds
+        // were never counted.)
+        refreshStatusUI(await dbGet(`${gameId}`));
 
     } catch (err) {
         console.error("Failed to give up game", err);
@@ -348,7 +302,7 @@ async function leaveGame(shouldRestart = false) {
         if (remainingFinished.length >= 1 && remainingActive.length === 0) {
           // All remaining players have finished — declare winner (per game mode)
           const { winnerPid, winnerClicks } = pickRoundWinner(remainingFinished, remainingPlayers, remainingGame.gameMode);
-          await dbPatch(`${leavingGameId}`, { winner: winnerPid, winnerClicks, status: 'finished' });
+          await dbPatch(`${leavingGameId}`, { winner: winnerPid, winnerClicks, status: 'finished', endedAt: Date.now(), endedBy: 'completed' });
         }
         // If there are still active players remaining, polling on their end will handle conclusion
       }
@@ -668,10 +622,13 @@ async function processSnapshot(snapshot) {
   });
 
   const completionConclude = finishedPlayers.length >= 1 && activePlayers.length === 0;
+  // Everyone gave up (or dropped out) and nobody finished: end with no winner.
+  const allGaveUpConclude = finishedPlayers.length === 0 && activePlayers.length === 0 &&
+    playerIds.some(pid => players[pid]?.gaveUp);
   const timeLimitMs = Number(snapshot.roundTimeLimitMs ?? 0);
   const timeoutReached = timeLimitMs > 0 && snapshot.startedAt && (nowTs - snapshot.startedAt) >= timeLimitMs;
   const shouldEndRound =
-    (completionConclude || timeoutReached) &&
+    (completionConclude || allGaveUpConclude || timeoutReached) &&
     snapshot.status === 'active' &&
     !snapshot.endedAt &&
     !_concluding;
@@ -739,14 +696,14 @@ async function processSnapshot(snapshot) {
         status: 'finished',
         startedAt: null,
         endedAt,
-        endedBy: endedByTimeout ? 'timeout' : 'completed',
+        endedBy: endedByTimeout ? 'timeout' : (winnerPid ? 'completed' : 'gaveup'),
         wins: winsUpdate ? Object.assign({}, snapshot.wins || {}, winsUpdate) : (snapshot.wins || {}),
         optimalPath: { loading: true },
       });
       if (winnerPid) {
         console.log(`Winner: ${winnerPid} (${winnerClicks} clicks, mode=${snapshot.gameMode || 'fewest'}) (Round ${roundNum})`);
       } else {
-        console.log(`Round ended by timeout with no finishers (Round ${roundNum})`);
+        console.log(`Round ended with no finishers — ${endedByTimeout ? 'timeout' : 'everyone gave up'} (Round ${roundNum})`);
       }
 
       // Career stats are NOT recorded here — any client can reach this block, so
