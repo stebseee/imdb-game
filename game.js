@@ -77,7 +77,7 @@ async function startRound() {
   // finishedAt values from the previous round and immediately ending the new round.
   const resets = participantIds.map(pid => {
     const name = (players[pid] && players[pid].name) ? players[pid].name : undefined;
-    const payload = { clicks: 0, finishedAt: null, gaveUp: false, ready: false, gaveUpAt: null, clickPath: null };
+    const payload = { clicks: 0, finishedAt: null, gaveUp: false, gaveUpVoluntarily: null, ready: false, gaveUpAt: null, clickPath: null };
     if (name) payload.name = name;
     return dbPatch(`${gameId}/players/${pid}`, payload);
   });
@@ -228,7 +228,7 @@ async function giveUpGame() {
     try {
         // 1. Set the gaveUp flag and record when the player gave up
         const gaveUpAt = Date.now();
-        await dbPatch(`${gameId}/players/${playerId}`, { gaveUp: true, finishedAt: null, name: displayName, gaveUpAt });
+        await dbPatch(`${gameId}/players/${playerId}`, { gaveUp: true, gaveUpVoluntarily: true, finishedAt: null, name: displayName, gaveUpAt });
 
         // 2. Refresh the UI. If this give-up leaves nobody racing, the round is
         // ended by processSnapshot's single conclusion path, which runs on every
@@ -485,9 +485,12 @@ async function processSnapshot(snapshot) {
       const participantPids = roundPids.length ? roundPids : playerIds;
       const nameOf = {};
       for (const pid of participantPids) nameOf[pid] = players[pid]?.name || `Player-${pid}`;
+      // Players who actually clicked Give Up. (gaveUp alone isn't enough: the
+      // round-end code also marks anyone who didn't finish as gaveUp.)
+      const quitPids = participantPids.filter(pid => players[pid]?.gaveUpVoluntarily);
       // Claim the round first so a later page load can never record it again.
       dbPatch(`${gameId}`, { statsRecordedEndedAt: statsEndedAt })
-        .then(() => recordRoundStats({ participantPids, winnerPid: snapshot.winner || null, nameOf, gameMode: snapshot.gameMode }))
+        .then(() => recordRoundStats({ participantPids, winnerPid: snapshot.winner || null, nameOf, gameMode: snapshot.gameMode, quitPids }))
         .then(() => { if (participantPids.includes(playerId)) return loadMyStats().then(renderCareerStats); })
         .catch(e => console.warn('[Stats] Could not record round', e));
     }

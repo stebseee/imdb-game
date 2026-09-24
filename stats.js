@@ -11,17 +11,20 @@
 //     lastSeen,        // ms epoch
 //     schemaVersion,   // bump when the shape changes
 //     vs: { {opponentId}: { wins, losses, lastName } },  // head-to-head (OVERALL)
+//     totalGiveUps,    // rounds where the player clicked Give Up (OVERALL). Counted
+//                      // separately from losses: a give-up the opponent then wins
+//                      // is a loss AND a give-up; a no-contest give-up is only a give-up.
 //     byMode: {        // per-mode breakdown, added in Phase 7 (fills from now on)
-//       fewest:  { totalWins, totalRounds, vs: { {opponentId}: { wins, losses, lastName } } },
-//       fastest: { totalWins, totalRounds, vs: { {opponentId}: { wins, losses, lastName } } },
+//       fewest:  { totalWins, totalRounds, totalGiveUps, vs: { {opponentId}: { wins, losses, lastName } } },
+//       fastest: { totalWins, totalRounds, totalGiveUps, vs: { {opponentId}: { wins, losses, lastName } } },
 //     }
 //   }
 //   win% = totalWins / totalRounds
 //
 // Stats start fresh at the 2.0 release (the old /players data was cleared), so
-// every player begins at 0 W/L. From the first round on, each concluded round
-// increments BOTH the overall totals and its matching byMode bucket in the same
-// atomic fan-out. A mode with no games yet has no byMode.<mode> node — the UI
+// every player begins at 0 W/L. A round only counts toward W/L if somebody
+// finished and won; each counted round increments BOTH the overall totals and
+// its matching byMode bucket in the same atomic fan-out. A mode with no games yet has no byMode.<mode> node — the UI
 // reads that as "no games in this mode yet".
 //
 // Identity: keyed on getStatsId() — TODAY the browser-local playerId, so history
@@ -91,19 +94,26 @@ async function touchMyStats() {
 // record rounds that were an actual contest against other players.
 const MIN_PLAYERS_FOR_STATS = 2;
 
-// Record one concluded round into lifetime stats. Called by the single client
-// that concludes the round (see game.js processSnapshot), so it writes every
-// participant's node in one fan-out PATCH using atomic server increments —
-// concurrent writers can't lose an update.
+// Record one concluded round into lifetime stats. Called once per round by the
+// host (see game.js processSnapshot), writing every affected player's node in
+// one fan-out PATCH using atomic server increments, so concurrent writers can't
+// lose an update.
 //   participantPids: everyone who played this round
-//   winnerPid:       the round winner, or null on a no-winner timeout
+//   winnerPid:       the round winner, or null if nobody finished
 //   nameOf:          { pid: displayName } to keep each /players/{id}/name fresh
 //   gameMode:        this round's mode ('fewest' | 'fastest'); increments the
-//                    matching byMode bucket ALONGSIDE the overall totals. An
+//                    matching byMode bucket alongside the overall totals. An
 //                    unknown mode still counts toward overall, but gets no bucket.
-// No-op for solo rounds (fewer than MIN_PLAYERS_FOR_STATS players) — they don't
-// count as wins or as rounds played.
-async function recordRoundStats({ participantPids, winnerPid, nameOf, gameMode }) {
+//   quitPids:        players who clicked Give Up this round
+// Rules:
+//   - A round only counts toward wins/losses if somebody finished and won.
+//     Nobody finishing (everyone gave up, or time ran out) is a no-contest:
+//     no round, win or loss for anyone.
+//   - Every Give Up click counts toward totalGiveUps, whatever the outcome. So a
+//     give-up where the opponent then wins is BOTH a loss and a give-up, and a
+//     give-up in a no-contest round is a give-up only.
+// No-op for solo rounds (fewer than MIN_PLAYERS_FOR_STATS players).
+async function recordRoundStats({ participantPids, winnerPid, nameOf, gameMode, quitPids }) {
   try {
     if (!participantPids || participantPids.length < MIN_PLAYERS_FOR_STATS) return;
     const now = Date.now();
@@ -112,25 +122,39 @@ async function recordRoundStats({ participantPids, winnerPid, nameOf, gameMode }
     // or "" when there's no bucket to touch.
     const mode = STATS_GAME_MODES.includes(gameMode) ? gameMode : null;
     const modePrefix = mode ? `byMode/${mode}/` : "";
+    const nameFor = (pid) => (nameOf && nameOf[pid]) || `Player-${pid}`;
+    const quitters = (quitPids || []).filter(pid => participantPids.includes(pid));
     const update = {};
-    for (const pid of participantPids) {
-      update[`${pid}/totalRounds`]   = _fbIncrement;
-      update[`${pid}/name`]          = (nameOf && nameOf[pid]) || `Player-${pid}`;
+    const touch = (pid) => {
+      update[`${pid}/name`]          = nameFor(pid);
       update[`${pid}/lastSeen`]      = now;
       update[`${pid}/schemaVersion`] = STATS_SCHEMA_VERSION;
-      if (mode) update[`${pid}/${modePrefix}totalRounds`] = _fbIncrement;
+    };
+
+    // Give-ups: always counted, whether or not the round has a winner.
+    for (const pid of quitters) {
+      touch(pid);
+      update[`${pid}/totalGiveUps`] = _fbIncrement;
+      if (mode) update[`${pid}/${modePrefix}totalGiveUps`] = _fbIncrement;
     }
+
+    // Wins/losses: only when somebody actually finished and won.
     if (winnerPid) {
+      for (const pid of participantPids) {
+        touch(pid);
+        update[`${pid}/totalRounds`] = _fbIncrement;
+        if (mode) update[`${pid}/${modePrefix}totalRounds`] = _fbIncrement;
+      }
       update[`${winnerPid}/totalWins`] = _fbIncrement;
       if (mode) update[`${winnerPid}/${modePrefix}totalWins`] = _fbIncrement;
-      const winnerName = (nameOf && nameOf[winnerPid]) || `Player-${winnerPid}`;
+      const winnerName = nameFor(winnerPid);
       // Head-to-head: the winner beat each other participant this round, so
       // winner +1 win vs each opponent, and each opponent +1 loss vs winner.
       // Keyed on opponent id; lastName is stored only for display. Mirror the
       // same head-to-head into the byMode bucket when the mode is tracked.
       for (const pid of participantPids) {
         if (pid === winnerPid) continue;
-        const oppName = (nameOf && nameOf[pid]) || `Player-${pid}`;
+        const oppName = nameFor(pid);
         update[`${winnerPid}/vs/${pid}/wins`]     = _fbIncrement;
         update[`${winnerPid}/vs/${pid}/lastName`] = oppName;
         update[`${pid}/vs/${winnerPid}/losses`]   = _fbIncrement;
@@ -143,6 +167,8 @@ async function recordRoundStats({ participantPids, winnerPid, nameOf, gameMode }
         }
       }
     }
+
+    if (Object.keys(update).length === 0) return; // no-contest with no give-ups: nothing to write
     await playersPatch('', update);
   } catch (e) {
     console.warn('[Stats] Could not record round into career stats', e);

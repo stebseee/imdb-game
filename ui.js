@@ -1087,7 +1087,7 @@ function _makeStatCard(label, accent) {
   const card = document.createElement("div");
   Object.assign(card.style, {
     flex: "1", background: accent ? "#3E49AD" : "rgba(255,255,255,0.55)", borderRadius: "8px",
-    padding: "10px 6px", textAlign: "center",
+    padding: "10px 4px", textAlign: "center", minWidth: "0",
   });
   const lab = document.createElement("div");
   lab.textContent = label;
@@ -1100,12 +1100,16 @@ function _makeStatCard(label, accent) {
   return { card, val };
 }
 const _cardsRow = document.createElement("div");
-Object.assign(_cardsRow.style, { display: "flex", gap: "8px", marginBottom: "16px" });
+Object.assign(_cardsRow.style, { display: "flex", gap: "6px", marginBottom: "16px" });
 const _winsCard = _makeStatCard("wins", false);
 const _lossesCard = _makeStatCard("losses", false);
+// Give-ups are their own counter, not a subset of losses: a give-up the opponent
+// then wins counts in both; a give-up in a round nobody finished is only this.
+const _giveUpsCard = _makeStatCard("gave up", false);
 const _rateCard = _makeStatCard("win rate", true);
 _cardsRow.appendChild(_winsCard.card);
 _cardsRow.appendChild(_lossesCard.card);
+_cardsRow.appendChild(_giveUpsCard.card);
 _cardsRow.appendChild(_rateCard.card);
 _profileModal.body.appendChild(_cardsRow);
 
@@ -1146,10 +1150,12 @@ function renderCareerStats(stats) {
 
   const wins   = Number(source?.totalWins   ?? 0);
   const rounds = Number(source?.totalRounds ?? 0);
+  const giveUps = Number(source?.totalGiveUps ?? 0);
   const losses = Math.max(0, rounds - wins);
   const pct = rounds ? Math.round((wins / rounds) * 100) : 0;
   _winsCard.val.textContent = String(wins);
   _lossesCard.val.textContent = String(losses);
+  _giveUpsCard.val.textContent = String(giveUps);
   _rateCard.val.textContent = rounds ? pct + "%" : "—";
 
   // Head-to-head rows, sorted by most games played
@@ -1165,10 +1171,15 @@ function renderCareerStats(stats) {
     const empty = document.createElement("div");
     // A per-mode view with no rounds gets its own copy — this mode just hasn't
     // been played yet, which is different from having no record at all.
-    if (_statsViewMode !== "all" && rounds === 0) {
+    // (A player can have give-ups but no counted rounds, if every round they
+    // played ended with nobody finishing, so check both.)
+    const playedAny = rounds > 0 || giveUps > 0;
+    if (playedAny) {
+      empty.textContent = "No head-to-head record yet.";
+    } else if (_statsViewMode !== "all") {
       empty.textContent = "No games in this mode yet.";
     } else {
-      empty.textContent = rounds ? "No head-to-head record yet." : "No games yet — play a round to start your record.";
+      empty.textContent = "No games yet — play a round to start your record.";
     }
     Object.assign(empty.style, { padding: "10px 12px", fontSize: "13px", color: "#5a4a00" });
     _h2hList.appendChild(empty);
