@@ -1,37 +1,63 @@
 # Automated 3-player tests
 
 These tests open **three Chrome windows side by side** (Bot A = host, Bot B, Bot C),
-each with the extension loaded. The **same three players play three rounds in a row**,
-so their career stats build up. After every round the test checks the full running
-totals for every bot:
+each with the extension loaded. Within each test file the **same three players play
+every round**, so their career stats build up. After every round the test checks the
+full running totals for every bot:
 
 - **Firebase**: wins / rounds / gave up, overall **and** per game mode, plus head-to-head
 - **The winners board**: game-mode label, finish order, "Did not finish"
 - **Each bot's 📊 profile**: wins / losses / gave up / win rate / round count
 
 It also prints a stats table in Terminal after each round, so you can watch the
-numbers build up. At the very end, the bots' player records and the test games are
-deleted from Firebase. The bots start as brand-new players every run, so you
+numbers build up. At the end of each file, the bots' player records and the test
+games are deleted from Firebase. The bots start as brand-new players every run, so you
 never need to wipe anything first.
 
-## The three rounds
+## What's covered
 
+There are three test files. Each launches its own three fresh bots, so its totals start from 0.
+
+**`three-players.spec.js`**: three rounds, each in a new game
 | Round | What happens | Winner |
 |---|---|---|
-| **1 · Fewest clicks** | B clicks once then gives up · C finishes in 3 clicks · A (host) finishes in 1 click, last | A |
-| **2 · Fastest to finish** | Same moves, but C finishes *first* | C (faster, despite more clicks) |
-| **3 · Everyone gives up** | B, C, then A give up | Nobody (no-contest) |
+| 1 · Fewest clicks | B clicks once then gives up · C finishes in 3 clicks · A (host) finishes in 1 click, last | A |
+| 2 · Fastest to finish | Same moves, but C finishes *first* | C (faster, despite more clicks) |
+| 3 · Everyone gives up | B, C, then A give up | Nobody (no-contest) |
 
-Expected running totals after each round (W = wins, L = losses, G = gave up):
+**`session.spec.js`**: five rounds in **one game session** (Play Again between rounds)
+| Round | What happens | Winner |
+|---|---|---|
+| 1 · Fewest | Everyone finishes: C in 3 clicks, B in 2, A in 1 (A finishes last) | A (fewest clicks) |
+| 2 · Fewest | B and C both 1 click (B first), A 2 clicks | B (tie → earlier finish) |
+| 3 · Host switches to Fastest | C 3 clicks first, A 1 click, B 2 clicks | C (first to finish) |
+| 4 · Host switches back to Fewest | C gives up; A and B both 2 clicks (A first) | A |
+| 5 · Fewest | Everyone gives up | Nobody (round score unchanged) |
 
-| After | Bot A | Bot B | Bot C |
-|---|---|---|---|
-| Round 1 | 1W 0L 0G | 0W 1L 1G | 0W 1L 0G |
-| Round 2 | 1W 1L 0G | 0W 2L 2G | 1W 1L 0G |
-| Round 3 | 1W 1L 1G | 0W 2L 3G | 1W 1L 1G |
+After each round it also checks the **in-game round score**: the Session Scoreboard, the
+game's win tally and its round history.
 
-Round 1 also covers the old "host's own finish ends the round" bug. The rounds run
-in order: if one fails, the later ones are skipped, because their totals depend on it.
+**`edge-cases.spec.js`**: the less common ways a round can go
+| Round | What happens | Expected |
+|---|---|---|
+| Time runs out, one finisher | A finishes; B and C never do | A wins · B and C lose, but it's **not** a give-up |
+| Time runs out, nobody finished | Nobody plays | No-contest: nothing counts |
+| Player leaves between rounds | C leaves; A and B play on | Next round is just A and B · C gets nothing |
+| Player leaves mid-round | B clicks once, then leaves; A and C finish | A wins · B gets nothing from the round |
+| Solo practice round | A plays alone | Nothing counts |
+
+The timeout rounds use a test-only shortcut: the smallest real time limit is 5
+minutes, so the test shortens the running round's limit in Firebase to 15–25 seconds.
+The round then times out exactly as it would for real players.
+
+After every round, all files check each bot's full running career stats in Firebase:
+wins / rounds / gave up, overall and per mode, plus head-to-head. The expected numbers
+come from a small "ledger" (`lib/ledger.js`) that applies the agreed scoring rules to
+each round's facts (who played, who won, who gave up).
+
+Round 1 of `three-players.spec.js` also covers the old "host's own finish ends the
+round" bug. The rounds in a file run in order: if one fails, the later ones are skipped,
+because their totals depend on it.
 
 ## One-time setup (on your Mac)
 
@@ -54,12 +80,14 @@ From the `e2e` folder:
 ```
 npm test
 ```
-Three Chrome windows open and play. Results print in Terminal as each step passes or fails.
+Three Chrome windows open and play. Results print in Terminal as each step passes or
+fails. A full run of all three files takes about 5 minutes.
 
 Other ways to run:
 
 | Command | What it does |
 |---|---|
+| `npx playwright test session` | Run just one file (`session`, `edge-cases` or `three-players`) |
 | `npm run test:headless` | Run with no visible windows (faster) |
 | `KEEP_TEST_DATA=1 npm test` | Keep the bots' records and the game in Firebase so you can inspect them |
 | `DEBUG_CONSOLE=1 npm test` | Also print the extension's console messages |

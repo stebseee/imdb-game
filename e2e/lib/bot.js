@@ -172,6 +172,39 @@ class Bot {
     }, { what: `${this.name}'s give-up to reach Firebase` });
   }
 
+  // Press "▶ Play Again" on the winners board: marks this player ready and puts
+  // the game back in the lobby for the next round.
+  async playAgain() {
+    await this.clickUi('play-again');
+    await waitFor(async () => {
+      const g = await dbGet(`games/${this.code}`);
+      return g && g.status === 'lobby' && g.players?.[this.pid]?.ready === true;
+    }, { what: `${this.name}'s Play Again to reach Firebase` });
+  }
+
+  // Press "Leave Game" (the host's "are you sure?" popup is auto-accepted).
+  async leaveGame() {
+    await this.clickUi('leave-game');
+    await waitFor(async () => (await dbGet(`games/${this.code}/players/${this.pid}`)) === null,
+      { what: `${this.name} to leave the game` });
+    await this.leaveGameSession();
+  }
+
+  // Host: change the game mode with the Settings dropdown (as a player would).
+  // In the lobby this also updates the game, so everyone sees the new mode.
+  async setGameMode(mode) {
+    await this.page.getByTestId('game-mode-select').evaluate((el, m) => {
+      el.value = m;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, mode);
+    await waitFor(async () => (await this.storageGet(['gameMode'])).gameMode === mode,
+      { what: `${this.name}'s game mode to change to ${mode}` });
+    if (this.code) {
+      await waitFor(async () => (await dbGet(`games/${this.code}/gameMode`)) === mode,
+        { what: `the lobby to show game mode ${mode}` });
+    }
+  }
+
   // Click an extension control by its data-testid. dispatchEvent fires the click
   // directly on the element, so IMDb overlays/banners can't intercept it.
   async clickUi(testId) {

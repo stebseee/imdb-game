@@ -1,7 +1,7 @@
 // game.js — shared setup + result checks for the 3-player rounds.
 
 const { expect } = require('@playwright/test');
-const { dbGet, dbDelete, waitFor } = require('./firebase');
+const { dbGet, dbPatch, dbDelete, waitFor } = require('./firebase');
 
 // Fixed pages so every run takes the same route (served as stand-ins, see imdb-stub.js).
 const ACTORS = {
@@ -20,15 +20,13 @@ const MODE_LABEL = {
   fastest: 'Fastest to finish wins',
 };
 
-// Host creates a game in `mode`, the guests join via the invite link, and the host
-// starts the round. Works for the first round and for later rounds (each round is a
-// fresh game; the bots keep their player identity and career stats). Resolves once
-// everyone is on the start actor's page with the round active. Returns the game code.
-async function startThreePlayerRound([host, ...guests], { mode }) {
+// Host creates a game in `mode` and the guests join via the invite link. Resolves
+// once everyone is in the lobby. Bots keep their player identity and career stats
+// across games. Returns the game code.
+async function createGame(host, guests, { mode }) {
   const bots = [host, ...guests];
-
   for (const bot of bots) {
-    await bot.leaveGameSession(); // no-op on the first round
+    await bot.leaveGameSession(); // drop any previous game (no-op the first time)
     await bot.storageSet({ displayName: bot.name, gameMode: mode, roundTimeLimitSec: 300 });
   }
   // Fix the actor pair so the route is the same every run (the debug "lock pair" setting).
@@ -39,31 +37,106 @@ async function startThreePlayerRound([host, ...guests], { mode }) {
   const code = await waitFor(async () => (await host.storageGet(['gameId'])).gameId,
     { what: `${host.name} to create a game` });
   console.log(`  game code: ${code}`);
+  await host.attach(code);
 
   for (const guest of guests) await guest.open(`https://www.imdb.com/?game=${code}`);
   await waitFor(async () => {
     const g = await dbGet(`games/${code}`);
     return g && Object.keys(g.players || {}).length === bots.length;
-  }, { what: 'both guests to join the lobby' });
-
-  for (const bot of bots) await bot.attach(code);
-
-  await host.clickUi('start-round');
-  const startPath = new URL(ACTORS.start.url).pathname; // e.g. /name/nm0000158/
-  await Promise.all(bots.map(bot =>
-    bot.page.waitForURL(u => u.pathname.startsWith(startPath), { timeout: 45_000 })));
-  await Promise.all(bots.map(bot => bot.waitReady()));
-  await waitFor(async () => (await dbGet(`games/${code}`))?.status === 'active',
-    { what: 'the round to go active' });
+  }, { what: `${guests.length ? 'the guests' : 'the host'} to be in the lobby` });
+  for (const guest of guests) await guest.attach(code);
   return code;
 }
 
+// Host starts a round; `players` are the bots expected to play it. Resolves once
+// they're all on the start actor's page with the round active. Returns the round's
+// roundKey (its stable ID).
+async function startRound(host, players) {
+  const code = host.code;
+  const before = await dbGet(`games/${code}`);
+  await host.clickUi('start-round');
+  const g = await waitFor(async () => {
+    const x = await dbGet(`games/${code}`);
+    return x && x.status === 'active' && x.roundKey && x.roundKey !== before?.roundKey ? x : null;
+  }, { what: 'the round to start' });
+  const startPath = new URL(ACTORS.start.url).pathname; // e.g. /name/nm0000158/
+  await Promise.all(players.map(bot =>
+    bot.page.waitForURL(u => u.pathname.startsWith(startPath), { timeout: 45_000 })));
+  await Promise.all(players.map(bot => bot.waitReady()));
+  return g.roundKey;
+}
+
+// First round of a fresh 3-player game (used by three-players.spec.js).
+async function startThreePlayerRound([host, ...guests], { mode }) {
+  const code = await createGame(host, guests, { mode });
+  await startRound(host, [host, ...guests]);
+  return code;
+}
+
+// Everyone presses Play Again, then goes to IMDb's home page to wait in the lobby.
+// (Moving off the actor pages means the next round's redirect is a real page change.)
+async function playAgain(bots) {
+  for (const bot of bots) await bot.playAgain();
+  for (const bot of bots) await bot.open('https://www.imdb.com/');
+}
+
+// Test-only shortcut: shorten the running round's time limit (the smallest
+// setting is 5 minutes). The extension reads the limit from the game, so the
+// round then ends by timeout as normal once this many seconds have passed since
+// it started.
+async function shortenTimeLimit(code, seconds) {
+  await dbPatch(`games/${code}`, { roundTimeLimitMs: seconds * 1000 });
+}
+
+// Play a route to the target actor with `clicks` actor clicks, visiting a (free)
+// movie page before each click, like a real player.
+const ROUTES = {
+  1: [ACTORS.target],
+  2: [ACTORS.meg, ACTORS.target],
+  3: [ACTORS.meg, ACTORS.morgan, ACTORS.target],
+};
+const ROUTE_TITLES = [TITLES.apollo13, TITLES.sleepless, TITLES.shawshank];
+async function finishIn(bot, clicks) {
+  const route = ROUTES[clicks];
+  for (let i = 0; i < route.length; i++) {
+    await bot.visit(ROUTE_TITLES[i]);
+    await bot.actorClick(route[i], { expectClicks: i + 1, finishing: i === route.length - 1 });
+  }
+}
+
 // Wait for the round to end AND for the host to record career stats for it.
-async function waitForRoundRecorded(code) {
+// Pass the roundKey from startRound() to be sure it's that round.
+async function waitForRoundRecorded(code, roundKey) {
   return waitFor(async () => {
     const g = await dbGet(`games/${code}`);
-    return g && g.status === 'finished' && g.roundKey && g.statsRecordedRound === g.roundKey ? g : null;
-  }, { timeout: 60_000, what: 'the round to finish and the host to record career stats' });
+    if (!g || g.status !== 'finished' || !g.roundKey) return null;
+    if (roundKey && g.roundKey !== roundKey) return null;
+    return g.statsRecordedRound === g.roundKey ? g : null;
+  }, { timeout: 90_000, what: 'the round to finish and the host to record career stats' });
+}
+
+// Check the in-game round score: the game's win tally, the number of rounds in
+// its history, and the Session Scoreboard shown on `viewer`'s winners board.
+//   wins: { A: 2, B: 1, C: 0 } — by bot key; bots not listed must have 0
+async function expectSessionScore(viewer, botsByKey, { wins, rounds }) {
+  const code = viewer.code;
+  const g = await dbGet(`games/${code}`);
+  const tally = {};
+  for (const [k, bot] of Object.entries(botsByKey)) tally[k] = Number(g?.wins?.[bot.pid] ?? 0);
+  const want = {};
+  for (const k of Object.keys(botsByKey)) want[k] = wins[k] || 0;
+  expect(tally, 'round wins this session (in Firebase)').toEqual(want);
+  expect(Object.keys(g?.roundHistory || {}).length, 'rounds in the session history').toBe(rounds);
+
+  const board = viewer.page.locator('#sessionStandings');
+  await expect(board, 'Session Scoreboard').toContainText('Session Scoreboard', { timeout: 30_000 });
+  const text = (await board.textContent()) || '';
+  for (const [k, bot] of Object.entries(botsByKey)) {
+    if (!(k in wins)) continue;
+    const m = text.match(new RegExp(`${bot.name}\\s*(\\d+) wins?`));
+    expect(m, `${bot.name} should be on the Session Scoreboard`).not.toBeNull();
+    expect(Number(m[1]), `${bot.name}'s wins on the Session Scoreboard`).toBe(wins[k]);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +285,7 @@ async function cleanupTestData(bots, codes) {
 
 module.exports = {
   ACTORS, TITLES, MODE_LABEL,
-  startThreePlayerRound, waitForRoundRecorded,
+  createGame, startRound, startThreePlayerRound, playAgain, shortenTimeLimit, finishIn,
+  waitForRoundRecorded, expectSessionScore,
   expectCareerTotals, printStatsTable, expectProfileCardsFor, expectWinnersBoard, cleanupTestData,
 };

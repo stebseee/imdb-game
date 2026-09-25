@@ -13,43 +13,14 @@
 // totals depend on it).
 
 const { test, expect } = require('@playwright/test');
-const { Bot } = require('../lib/bot');
+const { useThreeBots } = require('../lib/suite');
 const {
   ACTORS, TITLES,
   startThreePlayerRound, waitForRoundRecorded,
-  expectCareerTotals, printStatsTable, expectProfileCardsFor, expectWinnersBoard, cleanupTestData,
+  expectCareerTotals, expectProfileCardsFor, expectWinnersBoard,
 } = require('../lib/game');
 
-test.describe.configure({ mode: 'serial' });
-
-let A, B, C;
-let bots = [];
-let botsByKey = {};
-const codes = []; // every game created, for cleanup
-
-test.beforeAll(async () => {
-  test.setTimeout(2 * 60 * 1000);
-  A = await Bot.launch('Bot A', 0); // host
-  B = await Bot.launch('Bot B', 1);
-  C = await Bot.launch('Bot C', 2);
-  bots = [A, B, C];
-  botsByKey = { A, B, C };
-});
-
-test.afterEach(async ({}, testInfo) => {
-  if (testInfo.status !== testInfo.expectedStatus) {
-    for (const bot of bots) {
-      const png = await bot.screenshot();
-      if (png) await testInfo.attach(`${bot.name} at failure`, { body: png, contentType: 'image/png' });
-    }
-  }
-  if (bots.every(b => b.pid)) await printStatsTable(botsByKey, `Stats after: ${testInfo.title}`);
-});
-
-test.afterAll(async () => {
-  for (const bot of bots) await bot.close();
-  await cleanupTestData(bots, codes);
-});
+const ctx = useThreeBots(test);
 
 // C takes the long way round: 3 actor clicks, with free movie pages in between.
 async function slowRoute(bot) {
@@ -62,8 +33,9 @@ async function slowRoute(bot) {
 }
 
 test('Round 1 — Fewest clicks: A (host) wins in 1 click, B gives up, C finishes in 3 clicks and loses', async () => {
+  const { A, B, C, bots, byKey: botsByKey } = ctx;
   const code = await startThreePlayerRound(bots, { mode: 'fewest' });
-  codes.push(code);
+  ctx.codes.push(code);
 
   await test.step('B makes 1 click, then gives up', async () => {
     await B.actorClick(ACTORS.meg, { expectClicks: 1 });
@@ -92,8 +64,9 @@ test('Round 1 — Fewest clicks: A (host) wins in 1 click, B gives up, C finishe
 });
 
 test('Round 2 — Fastest to finish: C finishes first in 3 clicks and beats A\'s later 1-click finish; B gives up', async () => {
+  const { A, B, C, bots, byKey: botsByKey } = ctx;
   const code = await startThreePlayerRound(bots, { mode: 'fastest' });
-  codes.push(code);
+  ctx.codes.push(code);
 
   await test.step('B makes 1 click, then gives up', async () => {
     await B.actorClick(ACTORS.meg, { expectClicks: 1 });
@@ -122,8 +95,9 @@ test('Round 2 — Fastest to finish: C finishes first in 3 clicks and beats A\'s
 });
 
 test('Round 3 — Everyone gives up: no-contest — +1 gave up each, no wins or losses', async () => {
+  const { A, B, C, bots, byKey: botsByKey } = ctx;
   const code = await startThreePlayerRound(bots, { mode: 'fewest' });
-  codes.push(code);
+  ctx.codes.push(code);
 
   await test.step('B, C, then A (host) give up', async () => {
     await B.actorClick(ACTORS.meg, { expectClicks: 1 });

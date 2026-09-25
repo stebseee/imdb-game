@@ -441,6 +441,7 @@ winnerBox.appendChild(sessionStandingsDiv);
 // Play Again Button — larger and more prominent
 const playAgainBtn = document.createElement("button");
 playAgainBtn.textContent = "▶ Play Again";
+playAgainBtn.dataset.testid = "play-again";
 playAgainBtn.className = "yellow-button";
 Object.assign(playAgainBtn.style, {
   zIndex: "1000001",
@@ -729,6 +730,7 @@ startRoundBtn.addEventListener("click", async () => {
 const leaveBtn = document.createElement("button");
 leaveBtn.textContent = "Leave Game";
 leaveBtn.className = "blue-button danger-button";
+leaveBtn.dataset.testid = "leave-game";
 actionRow.appendChild(leaveBtn);
 
 // players list (lobby)
@@ -1258,6 +1260,7 @@ gameModeHelper.textContent = "How the round winner is decided.";
 Object.assign(gameModeHelper.style, { fontSize: "11px", opacity: "0.75", color: "#000" });
 gameModeRow.appendChild(gameModeHelper);
 const gameModeSelect = document.createElement("select");
+gameModeSelect.dataset.testid = "game-mode-select";
 Object.assign(gameModeSelect.style, {
   width: "100%", maxWidth: "220px", padding: "8px 10px", fontSize: "13px",
   borderRadius: "10px", border: "1px solid rgba(0,0,0,0.25)", outline: "none",

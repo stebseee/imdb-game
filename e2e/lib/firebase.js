@@ -37,6 +37,12 @@ async function dbGet(dbPath) {
   return res.json();
 }
 
+async function dbPatch(dbPath, value) {
+  const token = await getToken();
+  const res = await fetch(`${DB_URL}/${dbPath}.json?auth=${token}`, { method: 'PATCH', body: JSON.stringify(value) });
+  if (!res.ok) throw new Error(`PATCH ${dbPath} failed: HTTP ${res.status}`);
+}
+
 async function dbDelete(dbPath) {
   const token = await getToken();
   const res = await fetch(`${DB_URL}/${dbPath}.json?auth=${token}`, { method: 'DELETE' });
@@ -58,4 +64,4 @@ async function waitFor(fn, { timeout = 30_000, interval = 500, what = 'condition
   throw new Error(`Timed out after ${timeout / 1000}s waiting for: ${what}${lastErr ? ` (last error: ${lastErr.message})` : ''}`);
 }
 
-module.exports = { dbGet, dbDelete, waitFor };
+module.exports = { dbGet, dbPatch, dbDelete, waitFor };
