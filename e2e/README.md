@@ -1,25 +1,37 @@
 # Automated 3-player tests
 
 These tests open **three Chrome windows side by side** (Bot A = host, Bot B, Bot C),
-each with the extension loaded, and play a full round. At the end they check:
+each with the extension loaded. The **same three players play three rounds in a row**,
+so their career stats build up. After every round the test checks the full running
+totals for every bot:
 
-- **Firebase**: who won, and every bot's career stats (overall and per game mode)
+- **Firebase**: wins / rounds / gave up, overall **and** per game mode, plus head-to-head
 - **The winners board**: game-mode label, finish order, "Did not finish"
 - **Each bot's 📊 profile**: wins / losses / gave up / win rate / round count
 
-Every run uses brand-new browser profiles, so the bots always start at 0 stats.
-You don't need to wipe Firebase first. The bots' player records and the test game
-are deleted automatically at the end.
+It also prints a stats table in Terminal after each round, so you can watch the
+numbers build up. At the very end, the bots' player records and the test games are
+deleted from Firebase. The bots start as brand-new players every run, so you
+never need to wipe anything first.
 
-## The scenarios
+## The three rounds
 
-| Test | What happens | Expected result |
+| Round | What happens | Winner |
 |---|---|---|
-| **Fewest clicks** | B clicks once then gives up · C finishes in 3 clicks · A (host) finishes in 1 click last | A wins · B: loss + give-up · C: loss |
-| **Fastest to finish** | Same moves, but C finishes *first* | C wins (faster, despite more clicks) · A: loss · B: loss + give-up |
-| **Everyone gives up** | B, C, then A give up | No-contest: no wins or losses, 1 give-up each |
+| **1 · Fewest clicks** | B clicks once then gives up · C finishes in 3 clicks · A (host) finishes in 1 click, last | A |
+| **2 · Fastest to finish** | Same moves, but C finishes *first* | C (faster, despite more clicks) |
+| **3 · Everyone gives up** | B, C, then A give up | Nobody (no-contest) |
 
-The first test also covers the old "host's own finish ends the round" bug.
+Expected running totals after each round (W = wins, L = losses, G = gave up):
+
+| After | Bot A | Bot B | Bot C |
+|---|---|---|---|
+| Round 1 | 1W 0L 0G | 0W 1L 1G | 0W 1L 0G |
+| Round 2 | 1W 1L 0G | 0W 2L 2G | 1W 1L 0G |
+| Round 3 | 1W 1L 1G | 0W 2L 3G | 1W 1L 1G |
+
+Round 1 also covers the old "host's own finish ends the round" bug. The rounds run
+in order: if one fails, the later ones are skipped, because their totals depend on it.
 
 ## One-time setup (on your Mac)
 
@@ -48,7 +60,6 @@ Other ways to run:
 
 | Command | What it does |
 |---|---|
-| `npx playwright test -g "Fewest"` | Run just one scenario (match part of its name) |
 | `npm run test:headless` | Run with no visible windows (faster) |
 | `KEEP_TEST_DATA=1 npm test` | Keep the bots' records and the game in Firebase so you can inspect them |
 | `DEBUG_CONSOLE=1 npm test` | Also print the extension's console messages |

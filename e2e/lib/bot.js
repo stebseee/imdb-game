@@ -82,6 +82,17 @@ class Bot {
     if (obj.displayName) this._displayName = obj.displayName;
   }
 
+  // Drop this browser's current game session (the finished game from a previous
+  // round) so the bot can create/join the next one. Keeps playerId + displayName,
+  // so it's the SAME player and its career stats carry over between rounds.
+  async leaveGameSession() {
+    await this.extPage.evaluate((keys) => chrome.storage.local.remove(keys), [
+      'gameId', 'actorPair', 'clicks', 'role', 'hasRedirected', 'finished',
+      'lastReadyAt', 'roundStartedAt', 'clickPath', 'toastedFinishers', 'toastedGiveUps',
+    ]);
+    this.code = null;
+  }
+
   // Remember this bot's game code + playerId for the Firebase checks.
   async attach(code) {
     const { playerId } = await this.storageGet(['playerId']);
