@@ -16,7 +16,7 @@ const { test, expect } = require('@playwright/test');
 const { useThreeBots } = require('../lib/suite');
 const {
   ACTORS, TITLES,
-  startThreePlayerRound, waitForRoundRecorded,
+  startThreePlayerRound, waitForRoundRecorded, expectGiveUpAnnounced,
   expectCareerTotals, expectProfileCardsFor, expectWinnersBoard,
 } = require('../lib/game');
 
@@ -37,9 +37,10 @@ test('Round 1 — Fewest clicks: A (host) wins in 1 click, B gives up, C finishe
   const code = await startThreePlayerRound(bots, { mode: 'fewest' });
   ctx.codes.push(code);
 
-  await test.step('B makes 1 click, then gives up', async () => {
+  await test.step('B makes 1 click, then gives up (A and C see the announcement)', async () => {
     await B.actorClick(ACTORS.meg, { expectClicks: 1 });
     await B.giveUp();
+    await expectGiveUpAnnounced([A, C], B);
   });
   await test.step('C finishes the long way (3 clicks)', async () => {
     await slowRoute(C);

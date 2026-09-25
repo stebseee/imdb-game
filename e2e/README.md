@@ -24,7 +24,7 @@ There are three test files. Each one resets the bots' stats first, so its totals
 **`three-players.spec.js`**: three rounds, each in a new game
 | Round | What happens | Winner |
 |---|---|---|
-| 1 · Fewest clicks | B clicks once then gives up · C finishes in 3 clicks · A (host) finishes in 1 click, last | A |
+| 1 · Fewest clicks | B clicks once then gives up (A and C must see "Bot B has given up!") · C finishes in 3 clicks · A (host) finishes in 1 click, last | A |
 | 2 · Fastest to finish | Same moves, but C finishes *first* | C (faster, despite more clicks) |
 | 3 · Everyone gives up | B, C, then A give up | Nobody (no-contest) |
 
@@ -43,8 +43,8 @@ game's win tally and its round history.
 **`edge-cases.spec.js`**: the less common ways a round can go
 | Round | What happens | Expected |
 |---|---|---|
-| Time runs out, one finisher | A finishes; B and C never do | A wins · B and C lose, but it's **not** a give-up |
-| Time runs out, nobody finished | Nobody plays | No-contest: nothing counts |
+| Time runs out, one finisher | A finishes; B and C never do | A wins · B and C lose, but it's **not** a give-up (and nobody is announced as giving up) |
+| Time runs out, nobody finished | Nobody plays | No-contest: nothing counts, and nobody is announced as giving up |
 | Player leaves between rounds | C leaves; A and B play on | Next round is just A and B · C gets nothing |
 | Player leaves mid-round | B clicks once, then leaves; A and C finish | A wins · B gets nothing from the round |
 | Solo practice round | A plays alone | Nothing counts |

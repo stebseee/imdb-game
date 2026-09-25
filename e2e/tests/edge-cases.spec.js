@@ -12,14 +12,14 @@ const { Ledger } = require('../lib/ledger');
 const { dbGet } = require('../lib/firebase');
 const {
   ACTORS, createGame, startRound, playAgain, finishIn, shortenTimeLimit, waitForRoundRecorded,
-  expectSessionScore, expectCareerTotals, expectProfileCardsFor, expectWinnersBoard,
+  expectSessionScore, expectNoGiveUpAnnouncements, expectCareerTotals, expectProfileCardsFor, expectWinnersBoard,
 } = require('../lib/game');
 
 const ctx = useThreeBots(test);
 const ledger = new Ledger(['A', 'B', 'C']);
 let code = null;
 
-test('Time runs out, one finisher — A finishes; B and C lose on time but are NOT counted as giving up', async () => {
+test('Time runs out, one finisher — A finishes; B and C lose on time, but are NOT counted or announced as giving up', async () => {
   const { A, B, C } = ctx;
   code = await createGame(A, [B, C], { mode: 'fewest' });
   ctx.codes.push(code);
@@ -33,11 +33,12 @@ test('Time runs out, one finisher — A finishes; B and C lose on time but are N
   expect(game.winner, 'winner').toBe(A.pid);
   ledger.round({ mode: 'fewest', players: ['A', 'B', 'C'], winner: 'A' }); // no gave-ups
 
+  await expectNoGiveUpAnnouncements([A, B, C]); // timing out isn't giving up
   await expectWinnersBoard(A, { mode: 'fewest', winner: A, finishOrder: [A], didNotFinish: [B, C] });
   await expectCareerTotals(ctx.byKey, ledger.expected());
 });
 
-test('Time runs out, nobody finished — no-contest: no wins, losses or give-ups for anyone', async () => {
+test('Time runs out, nobody finished — no-contest: no wins, losses or give-ups, and nobody announced as giving up', async () => {
   const { A, B, C } = ctx;
   await playAgain([A, B, C]);
   const roundKey = await startRound(A, [A, B, C]);
@@ -47,6 +48,8 @@ test('Time runs out, nobody finished — no-contest: no wins, losses or give-ups
   expect(game.endedBy, 'how the round ended').toBe('timeout');
   expect(game.winner ?? null, 'winner').toBeNull();
   ledger.round({ mode: 'fewest', players: ['A', 'B', 'C'], winner: null }); // changes nothing
+
+  await expectNoGiveUpAnnouncements([A, B, C]);
 
   await expectWinnersBoard(A, { mode: 'fewest', winner: null, didNotFinish: [A, B, C] });
   await expectCareerTotals(ctx.byKey, ledger.expected());

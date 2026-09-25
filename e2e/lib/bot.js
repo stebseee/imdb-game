@@ -70,6 +70,19 @@ class Bot {
 
     const context = await chromium.launchPersistentContext(userDataDir, opts);
     await installImdbStub(context); // stand-in imdb.com pages (IMDb blocks automated browsers)
+    // Note every "… has given up!" popup the extension shows on a page, so tests
+    // can check who was announced as giving up. (Per page: resets on navigation.)
+    await context.addInitScript(() => {
+      window.__e2eGiveUpToasts = [];
+      new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const n of m.addedNodes) {
+            const text = (n.textContent || '').trim();
+            if (/has given up!/.test(text)) window.__e2eGiveUpToasts.push(text);
+          }
+        }
+      }).observe(document, { childList: true, subtree: true });
+    });
     let [sw] = context.serviceWorkers();
     if (!sw) sw = await context.waitForEvent('serviceworker', { timeout: 20_000 });
     const extId = new URL(sw.url()).host;
@@ -235,6 +248,11 @@ class Bot {
       await waitFor(async () => (await dbGet(`games/${this.code}/gameMode`)) === mode,
         { what: `the lobby to show game mode ${mode}` });
     }
+  }
+
+  // The "… has given up!" popups shown on this bot's current page.
+  async giveUpAnnouncements() {
+    return this.page.evaluate(() => window.__e2eGiveUpToasts || []).catch(() => []);
   }
 
   // Click an extension control by its data-testid. dispatchEvent fires the click

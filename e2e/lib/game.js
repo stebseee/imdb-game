@@ -143,6 +143,23 @@ async function expectSessionScore(viewer, botsByKey, { wins, rounds }) {
   }
 }
 
+// The other players should have seen a "<name> has given up!" popup.
+async function expectGiveUpAnnounced(viewers, quitter) {
+  for (const v of viewers) {
+    await waitFor(async () => (await v.giveUpAnnouncements()).some(t => t.includes(`${quitter.name} has given up!`)),
+      { timeout: 15_000, what: `${v.name} to see "${quitter.name} has given up!"` });
+  }
+}
+
+// Nobody should have been announced as giving up (e.g. when time simply ran out).
+async function expectNoGiveUpAnnouncements(bots) {
+  await new Promise(r => setTimeout(r, 1500)); // let any late popup appear
+  for (const b of bots) {
+    const seen = await b.giveUpAnnouncements();
+    expect(seen, `${b.name} should not have seen anyone announced as giving up`).toEqual([]);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Career stats checks
 //
@@ -290,6 +307,6 @@ async function cleanupTestData(bots, codes) {
 module.exports = {
   ACTORS, TITLES, MODE_LABEL,
   createGame, startRound, startThreePlayerRound, playAgain, shortenTimeLimit, finishIn,
-  waitForRoundRecorded, expectSessionScore,
+  waitForRoundRecorded, expectSessionScore, expectGiveUpAnnounced, expectNoGiveUpAnnouncements,
   expectCareerTotals, printStatsTable, expectProfileCardsFor, expectWinnersBoard, cleanupTestData,
 };
