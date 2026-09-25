@@ -8,5 +8,5 @@ module.exports = defineConfig({
   workers: 1,                    // one scenario at a time (each already opens 3 browsers)
   fullyParallel: false,
   retries: 0,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [['list'], ['html', { open: 'never' }], ['./lib/failure-summary-reporter.js']],
 });

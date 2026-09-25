@@ -119,6 +119,9 @@ Tip: in VS Code, open the Terminal with **Terminal → New Terminal**, then type
 
 - The Terminal output names the step that failed and what it was waiting for,
   e.g. `Bot C's click #2 (Morgan Freeman) to reach Firebase`.
+- **Easiest way to share a failure:** after any run with failures, open
+  `e2e/last-failures.txt` in VS Code. It has each failed round's error plus the last
+  lines it printed. Copy the whole file and paste it to Claude.
 - Run `npm run report` to see screenshots of all three windows at the moment it failed.
 - Most failures point at the step that went wrong: a click or give-up that never
   reached Firebase, or a stat that doesn't match (the message shows expected vs actual).
