@@ -27,8 +27,19 @@ async function _acquireFirebaseToken() {
   // Re-check the cache in case a prior in-flight request just populated it.
   if (_fbIdToken && Date.now() < _fbTokenExpiry - 60_000) return _fbIdToken;
 
-  // Try refreshing with stored refresh token first
-  const { firebaseRefreshToken } = await storageGet(['firebaseRefreshToken']);
+  // Reuse the token an earlier page load saved (tokens last about an hour). The
+  // content script restarts on every IMDb navigation, so without this every click
+  // cost a token-refresh request, and a busy session (or the e2e test bots) could
+  // trip Google's rate limit (TOO_MANY_ATTEMPTS_TRY_LATER).
+  const { firebaseRefreshToken, firebaseIdToken, firebaseIdTokenExpiry } =
+    await storageGet(['firebaseRefreshToken', 'firebaseIdToken', 'firebaseIdTokenExpiry']);
+  if (firebaseIdToken && Date.now() < Number(firebaseIdTokenExpiry) - 60_000) {
+    _fbIdToken = firebaseIdToken;
+    _fbTokenExpiry = Number(firebaseIdTokenExpiry);
+    return _fbIdToken;
+  }
+
+  // Otherwise refresh with the stored refresh token
   if (firebaseRefreshToken) {
     try {
       const res = await fetch(
@@ -40,7 +51,7 @@ async function _acquireFirebaseToken() {
       if (data.id_token) {
         _fbIdToken = data.id_token;
         _fbTokenExpiry = Date.now() + parseInt(data.expires_in) * 1000;
-        await storageSet({ firebaseRefreshToken: data.refresh_token });
+        await storageSet({ firebaseRefreshToken: data.refresh_token, firebaseIdToken: _fbIdToken, firebaseIdTokenExpiry: _fbTokenExpiry });
         return _fbIdToken;
       }
     } catch (e) { console.warn('[Firebase Auth] Refresh failed', e); }
@@ -56,7 +67,7 @@ async function _acquireFirebaseToken() {
   if (!data.idToken) throw new Error(`[Firebase Auth] Anonymous sign-in failed: ${JSON.stringify(data)}`);
   _fbIdToken = data.idToken;
   _fbTokenExpiry = Date.now() + parseInt(data.expiresIn) * 1000;
-  await storageSet({ firebaseRefreshToken: data.refreshToken });
+  await storageSet({ firebaseRefreshToken: data.refreshToken, firebaseIdToken: _fbIdToken, firebaseIdTokenExpiry: _fbTokenExpiry });
   return _fbIdToken;
 }
 

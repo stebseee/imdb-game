@@ -677,7 +677,11 @@ async function processSnapshot(snapshot) {
       }
 
       // Build round result for history
-      const roundNum = Object.keys(snapshot.roundHistory || {}).length + 1;
+      // History entries are keyed by the round's stable roundKey. Several clients
+      // can end the same round at once; keyed by a running count, each wrote its
+      // own entry (one round showed up 2-3 times). Same key = they overwrite.
+      const historyKey = String(snapshot.roundKey || endedAt);
+      const roundNum = Object.keys(snapshot.roundHistory || {}).filter(k => k !== historyKey).length + 1;
       const roundPlayerSummary = {};
       for (const pid of playerIds) {
         const isGaveUpForResult = !!players[pid]?.gaveUp || (endedByTimeout && !players[pid]?.finishedAt);
@@ -705,7 +709,7 @@ async function processSnapshot(snapshot) {
       }
 
       // Write round history as a dedicated nested path to avoid multi-path SSE issues
-      await dbPatch(`${gameId}/roundHistory`, { [roundNum]: roundResult });
+      await dbPatch(`${gameId}/roundHistory`, { [historyKey]: roundResult });
       // Write game state — mark optimalPath as loading so clients show a spinner
       await dbPatch(`${gameId}`, {
         winner: winnerPid,
