@@ -165,6 +165,15 @@ async function joinGameWithId(inputId) {
     const game = await dbGet(`${id}`);
     if (!game) { alert("Game not found: " + id); return; }
 
+    // No joining mid-round: a late joiner isn't in the round but would still count
+    // as "still playing" and hold the round open. They can join once it finishes
+    // (winners board) or in the lobby. Players already in the game can rejoin.
+    const alreadyInGame = !!game.players?.[playerId];
+    if (game.status === 'active' && !alreadyInGame) {
+      alert("A round is in progress — try again when it finishes.");
+      return;
+    }
+
     // Enforce player cap — count existing non-gave-up players, excluding self (rejoin allowed)
     const existingPlayers = game.players ? Object.keys(game.players) : [];
     const activePlayers   = existingPlayers.filter(pid => pid !== playerId && !game.players[pid]?.gaveUp);

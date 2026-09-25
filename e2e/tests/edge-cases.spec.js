@@ -4,12 +4,13 @@
 // give-up), time running out with nobody finished (no-contest, nothing counts),
 // a player leaving between rounds (they must not be pulled into the next round
 // or charged a loss), a player leaving mid-round, and a solo practice round
-// (never counts). Career stats are checked after every round.
+// (never counts), and someone trying to join mid-round (turned away until the
+// round is over). Career stats are checked after every round.
 
 const { test, expect } = require('@playwright/test');
 const { useThreeBots } = require('../lib/suite');
 const { Ledger } = require('../lib/ledger');
-const { dbGet } = require('../lib/firebase');
+const { dbGet, waitFor } = require('../lib/firebase');
 const {
   ACTORS, createGame, startRound, playAgain, finishIn, shortenTimeLimit, waitForRoundRecorded,
   expectSessionScore, expectNoGiveUpAnnouncements, expectCareerTotals, expectProfileCardsFor, expectWinnersBoard,
@@ -112,4 +113,40 @@ test('Solo practice round — A plays alone; nothing counts toward career stats'
   ledger.round({ mode: 'fewest', players: ['A'], winner: 'A' }); // solo: changes nothing
   await expectCareerTotals(ctx.byKey, ledger.expected());
   await expectProfileCardsFor(ctx.byKey, ledger.expected());
+});
+
+test('Joining mid-round is blocked — C is turned away while A and B play; C can join once the round is over', async () => {
+  const { A, B, C } = ctx;
+  await C.leaveGameSession(); // C starts outside any game
+  await C.storageSet({ displayName: C.name });
+  code = await createGame(A, [B], { mode: 'fewest' });
+  ctx.codes.push(code);
+  const roundKey = await startRound(A, [A, B]);
+
+  await test.step('C opens the invite link mid-round and is turned away', async () => {
+    C.dialogs = [];
+    await C.open(`https://www.imdb.com/?game=${code}`);
+    expect(C.dialogs.join('\n'), 'C should be told a round is in progress').toMatch(/round is in progress/i);
+    const g = await dbGet(`games/${code}`);
+    expect(Object.keys(g.players || {}), 'C must not be added to the game').not.toContain(C.pid);
+  });
+
+  await test.step('The round ends normally without waiting for C', async () => {
+    await finishIn(B, 1);
+    await finishIn(A, 2);
+    const game = await waitForRoundRecorded(code, roundKey);
+    expect(game.winner, 'winner').toBe(B.pid);
+    ledger.round({ mode: 'fewest', players: ['A', 'B'], winner: 'B' });
+    await expectCareerTotals(ctx.byKey, ledger.expected());
+  });
+
+  await test.step('Once the round is over, C can join', async () => {
+    await C.open(`https://www.imdb.com/?game=${code}`);
+    const g = await waitFor(async () => {
+      const snap = await dbGet(`games/${code}`);
+      return snap?.players?.[C.pid] ? snap : null;
+    }, { what: 'C to join after the round' });
+    expect(g.players[C.pid], 'C is in the game').toBeTruthy();
+    await C.attach(code);
+  });
 });

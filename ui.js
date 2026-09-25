@@ -2507,6 +2507,8 @@ function refreshStatusUI(snapshotGame) {
 
         actionRow.style.display = "block";
         giveUpBtn.style.display = canGiveUp ? "inline-block" : "none";
+        // Nobody can join mid-round, so don't offer the code/link while a round runs.
+        copyGroup.style.display = snapshotGame?.status === 'active' ? "none" : "inline-flex";
 
     } else {
         actionRow.style.display = "none";
