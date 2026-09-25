@@ -605,10 +605,13 @@ async function processSnapshot(snapshot) {
         showFinishToast(name, c);
         flashTabTitle(`🏆 ${name} finished — ${c} click${c === 1 ? '' : 's'}`);
       }
-      // Newly gave up DURING an active round → give-up banner. Gated to 'active'
-      // so timeout DNFs (which also set gaveUp at conclusion) don't spuriously
-      // announce everyone as "given up".
-      if (snapshot.status === 'active' && players[pid]?.gaveUp && !players[pid]?.finishedAt && !_toastedGiveUps.has(pid)) {
+      // Newly gave up DURING an active round → give-up banner, but only for a real
+      // Give Up click (gaveUpVoluntarily). When time runs out, the round-end code
+      // marks everyone who didn't finish as gaveUp (for the "Did not finish" list)
+      // a moment BEFORE it flips the round to finished, so gating on 'active' alone
+      // still announced timed-out players as having given up.
+      if (snapshot.status === 'active' && players[pid]?.gaveUp && players[pid]?.gaveUpVoluntarily &&
+          !players[pid]?.finishedAt && !_toastedGiveUps.has(pid)) {
         _toastedGiveUps.add(pid);
         storageSet({ toastedGiveUps: [..._toastedGiveUps] });
         showGiveUpToast(players[pid].name || pid);
