@@ -49,6 +49,6 @@ let _chatUnread = 0;           // unread count — messages from others not yet 
 let _chatLastKeys = '';        // serialised key list — avoids redundant re-renders
 let _chatLastSeenTime = 0;     // timestamp of newest message seen while chat was open (persisted)
 let _leavingGame = false;      // true while leaveGame() is running — suppresses the "kicked" alert
-let _statsRecordedEndedAt = null;  // endedAt of the last round recorded to career stats (host dedupe)
-let _statsRefreshedEndedAt = null; // endedAt of the last round we refreshed our own career line for
+let _statsRecordedRound = null;    // roundKey of the last round recorded to career stats (host dedupe)
+let _statsRefreshedEndedAt = null; // roundKey (or endedAt) of the last round we refreshed our own career line for
 

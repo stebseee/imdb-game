@@ -84,10 +84,14 @@ async function startRound() {
   await Promise.all(resets);
 
   // NOW set the game to active — SSE fires after player records are already clean
+  const roundStartedAtTs = Date.now();
   await dbPatch(`${gameId}`, {
     actorA: newActorPair[0],
     actorB: newActorPair[1],
-    startedAt: Date.now(),
+    startedAt: roundStartedAtTs,
+    // Stable ID for this round. Unlike endedAt, it never changes once set: several
+    // clients can end the same round at once, each writing its own endedAt.
+    roundKey: roundStartedAtTs,
     status: "active",
     winner: null,
     winnerClicks: null,
@@ -467,18 +471,20 @@ async function processSnapshot(snapshot) {
 
   // --- Career stats: record each round exactly once ---
   // The host records when it OBSERVES the finished state. "Already recorded" is
-  // persisted on the game node (statsRecordedEndedAt), not kept in page memory:
+  // persisted on the game node (statsRecordedRound), not kept in page memory:
   // every IMDb navigation reloads this script, and when the host's own finishing
   // click is what ends the round, they land on a fresh page that loads straight
-  // into 'finished'. The old in-memory "saw it while active" guard silently
-  // skipped exactly those rounds. statsTracked (set in startRound) restricts this
-  // to rounds started by this version, so older rounds aren't counted twice.
+  // into 'finished'. It's keyed on roundKey (set once in startRound), NOT endedAt:
+  // when the last player finishes, every client sees it at the same moment and
+  // may each end the round, each writing its own endedAt. Keying on endedAt
+  // recorded the same round once per rewrite.
   if (snapshot.status === 'finished' && snapshot.endedAt) {
     const statsEndedAt = snapshot.endedAt;
-    if (role === 'host' && snapshot.statsTracked &&
-        snapshot.statsRecordedEndedAt !== statsEndedAt &&
-        statsEndedAt !== _statsRecordedEndedAt) {
-      _statsRecordedEndedAt = statsEndedAt; // same-page dedupe while the flag write is in flight
+    const roundKey = snapshot.roundKey;
+    if (role === 'host' && snapshot.statsTracked && roundKey &&
+        snapshot.statsRecordedRound !== roundKey &&
+        roundKey !== _statsRecordedRound) {
+      _statsRecordedRound = roundKey; // same-page dedupe while the flag write is in flight
       // Count only players who were in this round (not someone who joined mid-round).
       const roundMap = snapshot.participants || {};
       const roundPids = Object.keys(roundMap).filter(pid => roundMap[pid] && players[pid]);
@@ -489,14 +495,15 @@ async function processSnapshot(snapshot) {
       // round-end code also marks anyone who didn't finish as gaveUp.)
       const quitPids = participantPids.filter(pid => players[pid]?.gaveUpVoluntarily);
       // Claim the round first so a later page load can never record it again.
-      dbPatch(`${gameId}`, { statsRecordedEndedAt: statsEndedAt })
+      dbPatch(`${gameId}`, { statsRecordedRound: roundKey })
         .then(() => recordRoundStats({ participantPids, winnerPid: snapshot.winner || null, nameOf, gameMode: snapshot.gameMode, quitPids }))
         .then(() => { if (participantPids.includes(playerId)) return loadMyStats().then(renderCareerStats); })
         .catch(e => console.warn('[Stats] Could not record round', e));
     }
     // Every client refreshes its own career line once per finished round.
-    if (statsEndedAt !== _statsRefreshedEndedAt) {
-      _statsRefreshedEndedAt = statsEndedAt;
+    const refreshKey = roundKey || statsEndedAt;
+    if (refreshKey !== _statsRefreshedEndedAt) {
+      _statsRefreshedEndedAt = refreshKey;
       if (playerIds.includes(playerId)) loadMyStats().then(renderCareerStats).catch(() => {});
     }
   }
