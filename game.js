@@ -35,8 +35,12 @@ async function startRound() {
   // 4) Always include the host (playerId) so the host can't accidentally exclude themself
   const participants = {};
   const existingParticipants = snapshot.participants || {};
+  // Only carry over participants who are still in the game. The participants map
+  // persists between rounds, so without this someone who left (or was kicked)
+  // after a round was pulled back into the next one as a nameless "ghost" player,
+  // which held the round up and gave the absent player a loss.
   Object.keys(existingParticipants).forEach(pid => {
-    if (existingParticipants[pid]) participants[pid] = true;
+    if (existingParticipants[pid] && players[pid]) participants[pid] = true;
   });
 
   Object.keys(players).forEach(pid => {
@@ -279,8 +283,10 @@ async function leaveGame(shouldRestart = false) {
   stopPolling();
 
   try {
-    // Remove player entry (set to null)
+    // Remove player entry (set to null), and their round-participant entry so the
+    // next round doesn't pull them back in.
     await dbPatch(`${leavingGameId}/players/${playerId}`, null);
+    await dbPatch(`${leavingGameId}/participants/${playerId}`, null);
   } catch (err) {
     console.warn("Failed to remove player from DB", err);
   }
@@ -357,6 +363,7 @@ async function kickPlayer(targetPid) {
   if (targetPid === playerId) return; // host can't kick themselves
   try {
     await dbPatch(`${gameId}/players/${targetPid}`, null);
+    await dbPatch(`${gameId}/participants/${targetPid}`, null); // don't pull them into the next round
   } catch (e) {
     console.warn('[Kick] Failed to remove player', e);
   }
