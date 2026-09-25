@@ -26,6 +26,7 @@ const MODE_LABEL = {
 async function createGame(host, guests, { mode }) {
   const bots = [host, ...guests];
   for (const bot of bots) {
+    bot.dialogs = [];
     await bot.leaveGameSession(); // drop any previous game (no-op the first time)
     await bot.storageSet({ displayName: bot.name, gameMode: mode, roundTimeLimitSec: 300 });
   }
@@ -34,13 +35,16 @@ async function createGame(host, guests, { mode }) {
 
   await host.open('https://www.imdb.com/');
   await host.clickUi('create-game');
-  const code = await waitFor(async () => (await host.storageGet(['gameId'])).gameId,
-    { what: `${host.name} to create a game` });
+  const code = await waitFor(async () => {
+    host.throwIfExtensionFailed();
+    return (await host.storageGet(['gameId'])).gameId;
+  }, { what: `${host.name} to create a game` });
   console.log(`  game code: ${code}`);
   await host.attach(code);
 
   for (const guest of guests) await guest.open(`https://www.imdb.com/?game=${code}`);
   await waitFor(async () => {
+    for (const bot of bots) bot.throwIfExtensionFailed();
     const g = await dbGet(`games/${code}`);
     return g && Object.keys(g.players || {}).length === bots.length;
   }, { what: `${guests.length ? 'the guests' : 'the host'} to be in the lobby` });

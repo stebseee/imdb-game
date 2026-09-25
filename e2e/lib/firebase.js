@@ -13,20 +13,58 @@ const API_KEY = (configSrc.match(/FIREBASE_API_KEY\s*=\s*"([^"]+)"/) || [])[1];
 const DB_URL = (configSrc.match(/FIREBASE_DB_URL\s*=\s*"([^"]+)"/) || [])[1];
 if (!API_KEY || !DB_URL) throw new Error('Could not read FIREBASE_API_KEY / FIREBASE_DB_URL from config.js');
 
+// The test's own sign-in is saved between runs (e2e/.firebase-test-auth.json,
+// git-ignored), so it doesn't create a new anonymous account every run; Google
+// limits how many a network can create in a short time.
+const AUTH_FILE = path.join(__dirname, '..', '.firebase-test-auth.json');
 let _token = null;
 let _tokenExpiry = 0;
 
+// Turn Google's rate-limit reply into a clear, final error.
+function authError(data) {
+  const msg = JSON.stringify(data);
+  if (/TOO_MANY_ATTEMPTS|QUOTA_EXCEEDED/i.test(msg)) {
+    const e = new Error('Google is temporarily limiting Firebase sign-ins from your network ' +
+      '(TOO_MANY_ATTEMPTS_TRY_LATER), usually after lots of test runs close together. ' +
+      'Wait about an hour, then run the tests again.');
+    e.fatal = true;
+    return e;
+  }
+  return new Error(`Firebase sign-in failed: ${msg}`);
+}
+
 async function getToken() {
   if (_token && Date.now() < _tokenExpiry - 60_000) return _token;
+  let saved = {};
+  try { saved = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8')); } catch (e) { /* first run */ }
+
+  if (saved.refreshToken) {
+    const res = await fetch(`https://securetoken.googleapis.com/v1/token?key=${API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(saved.refreshToken)}`,
+    });
+    const data = await res.json();
+    if (data.id_token) {
+      _token = data.id_token;
+      _tokenExpiry = Date.now() + Number(data.expires_in) * 1000;
+      fs.writeFileSync(AUTH_FILE, JSON.stringify({ refreshToken: data.refresh_token }));
+      return _token;
+    }
+    if (/TOO_MANY_ATTEMPTS|QUOTA_EXCEEDED/i.test(JSON.stringify(data))) throw authError(data);
+    // Otherwise the saved sign-in is no longer valid: fall through and make a new one.
+  }
+
   const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ returnSecureToken: true }),
   });
   const data = await res.json();
-  if (!data.idToken) throw new Error(`Firebase anonymous sign-in failed: ${JSON.stringify(data)}`);
+  if (!data.idToken) throw authError(data);
   _token = data.idToken;
   _tokenExpiry = Date.now() + Number(data.expiresIn) * 1000;
+  fs.writeFileSync(AUTH_FILE, JSON.stringify({ refreshToken: data.refreshToken }));
   return _token;
 }
 
@@ -58,7 +96,10 @@ async function waitFor(fn, { timeout = 30_000, interval = 500, what = 'condition
     try {
       const v = await fn();
       if (v) return v;
-    } catch (e) { lastErr = e; }
+    } catch (e) {
+      if (e && e.fatal) throw e; // e.g. sign-ins rate-limited: no point waiting
+      lastErr = e;
+    }
     await new Promise(r => setTimeout(r, interval));
   }
   throw new Error(`Timed out after ${timeout / 1000}s waiting for: ${what}${lastErr ? ` (last error: ${lastErr.message})` : ''}`);

@@ -9,6 +9,7 @@
 // expected totals depend on it).
 
 const { Bot } = require('./bot');
+const { dbDelete } = require('./firebase');
 const { printStatsTable, cleanupTestData } = require('./game');
 
 function useThreeBots(test) {
@@ -23,6 +24,20 @@ function useThreeBots(test) {
     ctx.C = await Bot.launch('Bot C', 2);
     ctx.bots = [ctx.A, ctx.B, ctx.C];
     ctx.byKey = { A: ctx.A, B: ctx.B, C: ctx.C };
+
+    // Each bot is the same saved player every run. Load IMDb once so the
+    // extension signs in (reusing its saved sign-in), then reset the bot's stats
+    // so this file's expected totals start from 0.
+    for (const bot of ctx.bots) {
+      await bot.leaveGameSession();
+      await bot.storageSet({ displayName: bot.name });
+      await bot.open('https://www.imdb.com/');
+      bot.throwIfExtensionFailed();
+      const { playerId } = await bot.storageGet(['playerId']);
+      if (!playerId) throw new Error(`${bot.name} has no playerId after loading IMDb`);
+      bot.pid = playerId;
+      await dbDelete(`players/${playerId}`);
+    }
   });
 
   test.afterEach(async ({}, testInfo) => {

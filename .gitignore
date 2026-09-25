@@ -13,3 +13,5 @@ e2e/node_modules/
 e2e/test-results/
 e2e/playwright-report/
 e2e/last-failures.txt
+e2e/.bot-profiles/
+e2e/.firebase-test-auth.json

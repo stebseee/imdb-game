@@ -1,7 +1,10 @@
 // bot.js — one automated player: its own Chrome window with the extension loaded.
 //
-// Each bot gets a brand-new browser profile, so it is a brand-new player (new
-// playerId, 0 career stats) every run — no need to wipe Firebase between runs.
+// Each bot keeps a saved browser profile between runs (e2e/.bot-profiles/,
+// git-ignored), so it's the same player with the same sign-in every run, rather
+// than a new anonymous Firebase account each time (Google limits how many a
+// network can create in a short time). Its stats are reset at the start of each
+// test file (see suite.js). Set FRESH_BOTS=1 to use throwaway profiles instead.
 //
 // How a bot "clicks" an actor: it adds a link to the page and clicks it. The
 // extension's real click handler counts it exactly like a human click. We stop the
@@ -17,17 +20,20 @@ const { dbGet, waitFor } = require('./firebase');
 const { installImdbStub } = require('./imdb-stub');
 
 const EXT_PATH = path.resolve(__dirname, '..', '..'); // the repo root is the unpacked extension
+const PROFILES_DIR = path.join(__dirname, '..', '.bot-profiles');
 const HEADLESS = !!process.env.HEADLESS;
 const WIN_W = 560;
 const WIN_H = 860;
 
 class Bot {
-  constructor({ name, context, page, extPage, userDataDir }) {
+  constructor({ name, context, page, extPage, userDataDir, persistent }) {
     this.name = name;
     this.context = context;
     this.page = page;         // the bot's IMDb tab
     this.extPage = extPage;   // an extension page, used to read/write chrome.storage
     this.userDataDir = userDataDir;
+    this.persistent = persistent;
+    this.dialogs = [];        // popups the extension showed (alerts/confirms)
     this.pid = null;          // playerId, filled in by attach()
     this.code = null;         // game code, filled in by attach()
     this._cookieBannerHandled = false;
@@ -35,7 +41,19 @@ class Bot {
 
   // Launch a fresh Chrome with the extension. `slot` tiles the windows side by side.
   static async launch(name, slot = 0) {
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imdb-race-bot-'));
+    const persistent = !process.env.FRESH_BOTS;
+    let userDataDir;
+    if (persistent) {
+      userDataDir = path.join(PROFILES_DIR, name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+      fs.mkdirSync(userDataDir, { recursive: true });
+      // A run stopped with Ctrl+C can leave Chrome's profile lock behind, which
+      // would stop the profile opening next time. Clear any stale lock.
+      for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+        fs.rmSync(path.join(userDataDir, f), { force: true });
+      }
+    } else {
+      userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'imdb-race-bot-'));
+    }
     const opts = {
       headless: HEADLESS,
       viewport: null, // use the real window size
@@ -63,14 +81,28 @@ class Bot {
 
     // Auto-accept the extension's confirm()/alert() popups (e.g. "Are you sure you
     // want to give up?"), and log them so a failing run shows what appeared.
+    const bot = new Bot({ name, context, page, extPage, userDataDir, persistent });
     page.on('dialog', async (d) => {
       console.log(`  [${name}] dialog: ${d.message()}`);
+      bot.dialogs.push(d.message());
       await d.accept().catch(() => {});
     });
     if (process.env.DEBUG_CONSOLE) {
       page.on('console', (m) => console.log(`  [${name}] console.${m.type()}: ${m.text()}`));
     }
-    return new Bot({ name, context, page, extPage, userDataDir });
+    return bot;
+  }
+
+  // If the extension has shown a "Failed to …" popup (it couldn't reach
+  // Firebase), stop straight away with a clear explanation.
+  throwIfExtensionFailed() {
+    const bad = this.dialogs.find(m => /^Failed to/i.test(m));
+    if (!bad) return;
+    const e = new Error(`${this.name}'s extension showed "${bad}", meaning it couldn't reach Firebase. ` +
+      'This is usually Google temporarily limiting sign-ins from your network after lots of test ' +
+      'runs close together. Wait about an hour, then run the tests again.');
+    e.fatal = true;
+    throw e;
   }
 
   // --- chrome.storage (what the extension persists per browser) ---
@@ -217,7 +249,7 @@ class Bot {
 
   async close() {
     await this.context.close().catch(() => {});
-    fs.rmSync(this.userDataDir, { recursive: true, force: true });
+    if (!this.persistent) fs.rmSync(this.userDataDir, { recursive: true, force: true });
   }
 
   // IMDb shows a cookie-consent banner in some regions (e.g. UK/EU). Accept it

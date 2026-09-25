@@ -11,12 +11,15 @@ full running totals for every bot:
 
 It also prints a stats table in Terminal after each round, so you can watch the
 numbers build up. At the end of each file, the bots' player records and the test
-games are deleted from Firebase. The bots start as brand-new players every run, so you
-never need to wipe anything first.
+games are deleted from Firebase.
+
+The bots are the **same three players every run**: each keeps a saved browser profile
+in `e2e/.bot-profiles/` (git-ignored), so it signs in once and reuses that. Their stats
+are reset to 0 at the start of each test file, so you never need to wipe anything first.
 
 ## What's covered
 
-There are three test files. Each launches its own three fresh bots, so its totals start from 0.
+There are three test files. Each one resets the bots' stats first, so its totals start from 0.
 
 **`three-players.spec.js`**: three rounds, each in a new game
 | Round | What happens | Winner |
@@ -92,6 +95,7 @@ Other ways to run:
 | `KEEP_TEST_DATA=1 npm test` | Keep the bots' records and the game in Firebase so you can inspect them |
 | `DEBUG_CONSOLE=1 npm test` | Also print the extension's console messages |
 | `REAL_IMDB=1 npm test` | Use the real IMDb site instead of stand-in pages (see below) |
+| `FRESH_BOTS=1 npm test` | Use brand-new throwaway bots instead of the saved ones (creates new sign-ins, so use sparingly) |
 | `npm run report` | Open the HTML report from the last run (includes screenshots of each window when a test fails) |
 
 Tip: in VS Code, open the Terminal with **Terminal → New Terminal**, then type `cd e2e` before the commands.
@@ -125,6 +129,10 @@ Tip: in VS Code, open the Terminal with **Terminal → New Terminal**, then type
 - Run `npm run report` to see screenshots of all three windows at the moment it failed.
 - Most failures point at the step that went wrong: a click or give-up that never
   reached Firebase, or a stat that doesn't match (the message shows expected vs actual).
+- **"Google is temporarily limiting Firebase sign-ins"** (or a bot popup saying
+  "Failed to create game" / "Failed to join game"): too many sign-ins from your network
+  in a short time. Wait about an hour and run again. The saved bot profiles keep this
+  rare, since the bots only sign in on their very first run.
 - `REAL_IMDB=1 npm test` uses the real IMDb site instead of stand-in pages. Expect
   IMDb's verification page; you'd have to solve it by hand in each window, so this
   is only useful for occasional spot checks.
