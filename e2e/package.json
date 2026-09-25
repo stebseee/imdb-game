@@ -1,0 +1,13 @@
+{
+  "name": "imdb-click-race-e2e",
+  "private": true,
+  "description": "Automated 3-player end-to-end tests for the IMDB Click Race extension",
+  "scripts": {
+    "test": "playwright test",
+    "test:headless": "HEADLESS=1 playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

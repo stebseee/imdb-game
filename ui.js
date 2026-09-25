@@ -185,6 +185,7 @@ function makeToolIcon(svgMarkup, label, onClick) {
 }
 
 const profileToolBtn  = makeToolIcon(ICON_STATS, "Your profile & stats", () => openProfileModal());
+profileToolBtn.dataset.testid = "open-profile"; // data-testid hooks are for the e2e tests (e2e/)
 const settingsToolBtn = makeToolIcon(ICON_SETTINGS, "Settings", () => openSettingsModal());
 const rulesToolBtn     = makeToolIcon(ICON_RULES, "Rules", () => openRulesModal());
 headerTools.appendChild(profileToolBtn);
@@ -218,6 +219,7 @@ header.addEventListener("click", () => applyPanelCollapse(!_panelCollapsed));
 
 // Game info & target
 const gameInfo = document.createElement("div");
+gameInfo.dataset.testid = "game-info";
 gameInfo.style.marginBottom = "8px";
 gameInfo.innerHTML = "Game: <em>Not in a game</em>";
 panelContent.appendChild(gameInfo);
@@ -230,6 +232,7 @@ nameRow.style.marginTop = "8px";
 panelContent.appendChild(nameRow);
 
 const nameChip = document.createElement("div");
+nameChip.dataset.testid = "name-chip";
 Object.assign(nameChip.style, {
   cursor: "pointer", fontWeight: "700", fontSize: "15px",
   display: "inline-block", textDecoration: "underline", textDecorationStyle: "dotted",
@@ -466,6 +469,7 @@ panelContent.appendChild(btnRow);
 const startBtn = document.createElement("button");
 startBtn.textContent = "Create Game";
 startBtn.className = "blue-button";
+startBtn.dataset.testid = "create-game";
 btnRow.appendChild(startBtn);
 
 const joinBtn = document.createElement("button");
@@ -485,6 +489,7 @@ panelContent.appendChild(actionRow);
 const giveUpBtn = document.createElement("button");
 giveUpBtn.textContent = "Give Up";
 giveUpBtn.id = "giveUpBtn"
+giveUpBtn.dataset.testid = "give-up";
 giveUpBtn.className = "blue-button danger-button";
 actionRow.appendChild(giveUpBtn);
 
@@ -549,6 +554,7 @@ function showCopyOnButton(text, color) {
 const startRoundBtn = document.createElement("button");
 startRoundBtn.textContent = "Start Round";
 startRoundBtn.className = "blue-button";
+startRoundBtn.dataset.testid = "start-round";
 actionRow.appendChild(startRoundBtn);
 
 // Copy Game Code + invite-link chain icon as one segmented control:
@@ -1083,7 +1089,7 @@ _statsModeRow.appendChild(_statsModeSelect);
 _profileModal.body.appendChild(_statsModeRow);
 
 // Metric cards: wins / losses / win rate
-function _makeStatCard(label, accent) {
+function _makeStatCard(label, accent, testKey) {
   const card = document.createElement("div");
   Object.assign(card.style, {
     flex: "1", background: accent ? "#3E49AD" : "rgba(255,255,255,0.55)", borderRadius: "8px",
@@ -1098,6 +1104,7 @@ function _makeStatCard(label, accent) {
   // Optional small line under the value (used by win rate for the round count).
   const sub = document.createElement("div");
   Object.assign(sub.style, { fontSize: "10px", marginTop: "1px", color: accent ? "#cdd2f2" : "#5a4a00" });
+  if (testKey) { val.dataset.testid = `stat-${testKey}`; sub.dataset.testid = `stat-${testKey}-sub`; }
   card.appendChild(lab);
   card.appendChild(val);
   card.appendChild(sub);
@@ -1105,12 +1112,12 @@ function _makeStatCard(label, accent) {
 }
 const _cardsRow = document.createElement("div");
 Object.assign(_cardsRow.style, { display: "flex", gap: "6px", marginBottom: "16px" });
-const _winsCard = _makeStatCard("wins", false);
-const _lossesCard = _makeStatCard("losses", false);
+const _winsCard = _makeStatCard("wins", false, "wins");
+const _lossesCard = _makeStatCard("losses", false, "losses");
 // Give-ups are their own counter, not a subset of losses: a give-up the opponent
 // then wins counts in both; a give-up in a round nobody finished is only this.
-const _giveUpsCard = _makeStatCard("gave up", false);
-const _rateCard = _makeStatCard("win rate", true);
+const _giveUpsCard = _makeStatCard("gave up", false, "giveups");
+const _rateCard = _makeStatCard("win rate", true, "winrate");
 _cardsRow.appendChild(_winsCard.card);
 _cardsRow.appendChild(_lossesCard.card);
 _cardsRow.appendChild(_giveUpsCard.card);
@@ -2332,7 +2339,10 @@ function refreshStatusUI(snapshotGame) {
     } else {
       // No finishers: show Game Ended and indicate no finishers
       winnerText.innerHTML = `Game Ended`;
-      leaderboardList.innerHTML = 'No finishers recorded.';
+      // Append rather than overwrite, so the "Game mode:" header above stays.
+      const noFinishers = document.createElement('div');
+      noFinishers.textContent = 'No finishers recorded.';
+      leaderboardList.appendChild(noFinishers);
     }
 
     // Append gave-up players at bottom in order who gave up first -> last
