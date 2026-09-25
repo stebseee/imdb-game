@@ -1,7 +1,7 @@
 # Automated 3-player tests
 
 These tests open **three Chrome windows side by side** (Bot A = host, Bot B, Bot C),
-each with the extension loaded, and play a full round on the real IMDb site. At the end they check:
+each with the extension loaded, and play a full round. At the end they check:
 
 - **Firebase**: who won, and every bot's career stats (overall and per game mode)
 - **The winners board**: game-mode label, finish order, "Did not finish"
@@ -52,11 +52,20 @@ Other ways to run:
 | `npm run test:headless` | Run with no visible windows (faster) |
 | `KEEP_TEST_DATA=1 npm test` | Keep the bots' records and the game in Firebase so you can inspect them |
 | `DEBUG_CONSOLE=1 npm test` | Also print the extension's console messages |
+| `REAL_IMDB=1 npm test` | Use the real IMDb site instead of stand-in pages (see below) |
 | `npm run report` | Open the HTML report from the last run (includes screenshots of each window when a test fails) |
 
 Tip: in VS Code, open the Terminal with **Terminal → New Terminal**, then type `cd e2e` before the commands.
 
 ## How the bots play
+
+- **Stand-in IMDb pages.** Real IMDb shows a bot-verification page to automated
+  browsers, which blocks the test. So each bot gets simple stand-in pages at the
+  real `https://www.imdb.com/...` addresses. The extension loads on them exactly
+  as normal (same panel, same code), and the page titles match IMDb's format so
+  click paths still read "Tom Hanks → Apollo 13 → …". Firebase is real.
+  This tests the game, not IMDb's page layout, so still do a quick manual check on
+  the real site before a release (e.g. the page filters hiding sections).
 
 - **Actor clicks** (the ones the game counts): the bot adds a link to the page and
   clicks it. The extension's real click handler counts it, and the test waits
@@ -72,10 +81,11 @@ Tip: in VS Code, open the Terminal with **Terminal → New Terminal**, then type
 - The Terminal output names the step that failed and what it was waiting for,
   e.g. `Bot C's click #2 (Morgan Freeman) to reach Firebase`.
 - Run `npm run report` to see screenshots of all three windows at the moment it failed.
-- **IMDb hiccups**: IMDb sometimes loads slowly or shows a robot check to automated
-  browsers. If a run fails on a page load, just run it again. A failure that repeats
-  in the same place is worth investigating.
-- A cookie banner (UK/EU) is accepted automatically.
+- Most failures point at the step that went wrong: a click or give-up that never
+  reached Firebase, or a stat that doesn't match (the message shows expected vs actual).
+- `REAL_IMDB=1 npm test` uses the real IMDb site instead of stand-in pages. Expect
+  IMDb's verification page; you'd have to solve it by hand in each window, so this
+  is only useful for occasional spot checks.
 
 ## Notes
 

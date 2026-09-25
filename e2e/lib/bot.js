@@ -14,6 +14,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { dbGet, waitFor } = require('./firebase');
+const { installImdbStub } = require('./imdb-stub');
 
 const EXT_PATH = path.resolve(__dirname, '..', '..'); // the repo root is the unpacked extension
 const HEADLESS = !!process.env.HEADLESS;
@@ -50,6 +51,7 @@ class Bot {
     else opts.channel = 'chromium';
 
     const context = await chromium.launchPersistentContext(userDataDir, opts);
+    await installImdbStub(context); // stand-in imdb.com pages (IMDb blocks automated browsers)
     let [sw] = context.serviceWorkers();
     if (!sw) sw = await context.waitForEvent('serviceworker', { timeout: 20_000 });
     const extId = new URL(sw.url()).host;
@@ -177,6 +179,7 @@ class Bot {
   // IMDb shows a cookie-consent banner in some regions (e.g. UK/EU). Accept it
   // once so it doesn't cover the page; ignore it if it isn't there.
   async _dismissCookieBanner() {
+    if (!process.env.REAL_IMDB) return; // stand-in pages have no banner
     if (this._cookieBannerHandled) return;
     this._cookieBannerHandled = true;
     const btn = this.page.locator('[data-testid="accept-button"]');
