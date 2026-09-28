@@ -213,6 +213,7 @@ function applyPanelCollapse(collapsed) {
   uiBox.style.minHeight = collapsed ? "0" : "";
   uiBox.style.maxHeight = collapsed ? "none" : "";
   storageSet({ panelCollapsed: collapsed });
+  if (!collapsed) fitWinnerBoard();
 }
 
 header.addEventListener("click", () => applyPanelCollapse(!_panelCollapsed));
@@ -460,6 +461,23 @@ waitingForHostDiv.textContent = 'Waiting for host to start the next round…';
 winnerBox.appendChild(waitingForHostDiv);
 
 panelContent.appendChild(winnerBox); // Append winner box to the main UI box
+
+// The winners board sits on top of the gold panel, so it can only be as tall as
+// the panel. When a round ends most of the panel's own content is hidden and it
+// shrinks to its min-height, squeezing the board into a scrollbar. Grow the panel
+// to fit the board instead (the panel's max-height, 82vh, still caps it — only a
+// really long board scrolls). Re-fits when the board's content changes size.
+function fitWinnerBoard() {
+  if (_panelCollapsed) return;
+  uiBox.style.minHeight = ""; // back to the stylesheet minimum before measuring
+  if (winnerBox.style.display !== "flex") return;
+  const overflow = winnerBox.scrollHeight - winnerBox.clientHeight;
+  if (overflow > 0) {
+    uiBox.style.minHeight = `${parseFloat(getComputedStyle(uiBox).height) + overflow}px`;
+  }
+}
+const _winnerBoardObserver = new ResizeObserver(() => fitWinnerBoard());
+[winnerTextContainer, sessionStandingsDiv, waitingForHostDiv].forEach(el => _winnerBoardObserver.observe(el));
 
 // controls row (Create/Join)
 const btnRow = document.createElement("div");
@@ -2440,10 +2458,12 @@ function refreshStatusUI(snapshotGame) {
     btnRow.style.display = "none";
     nameRow.style.display = "none";
     actionRow.style.display = "none";
+    fitWinnerBoard();
   } else {
     // Hide winner box if no winner or game is not finished
     optimalSection.style.display = 'none';
     winnerBox.style.display = "none";
+    fitWinnerBoard(); // drop the extra height the board needed
     if (gameId) {
         // Only show controls/lobby if a game is active
         lobbyBox.style.display = "block";
@@ -2645,6 +2665,7 @@ function updateGameControls() {
 
   if (!inGame) {
      winnerBox.style.display = "none";
+     fitWinnerBoard();
      btnRow.style.display = "block";
      nameRow.style.display = "flex";
      lobbyBox.style.display = "none";
