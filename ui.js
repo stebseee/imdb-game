@@ -876,6 +876,20 @@ hintDiv.style.marginBottom = "12px";
 hintDiv.innerHTML = "Create a game to generate an ID and enter the lobby. When 2 players are present the host can start the round.";
 panelContent.appendChild(hintDiv);
 
+// Version label — tiny text pinned to the bottom-right corner of the panel.
+// Reads the version straight from manifest.json, so it updates itself.
+const versionLabel = document.createElement("div");
+versionLabel.textContent = "Version " + chrome.runtime.getManifest().version;
+Object.assign(versionLabel.style, {
+  position: "absolute",
+  bottom: "6px",
+  right: "12px",
+  fontSize: "10px",
+  opacity: "0.6",
+});
+panelContent.insertBefore(versionLabel, winnerBox);
+panelContent.style.paddingBottom = "14px";
+
 // ----------------------
 // RULES MODAL
 // Add a Rules button at the bottom of the main modal which opens a secondary modal overlay
