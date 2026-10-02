@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Click Race — UI preview</title>
+<!--
+  UI PREVIEW — for styling the game panel without reloading the extension.
+
+  Loads the REAL content.css and ui.js etc. from the extension folder and fills
+  them with made-up game data (nothing talks to Firebase). Pick a screen with
+  the buttons at the top left.
+
+  How to use (VS Code):
+    1. Install the "Live Server" extension (by Ritwick Dey) — one time only.
+    2. Right-click this file → "Open with Live Server".
+    3. Edit content.css (or ui.js) and save — the preview updates by itself.
+       CSS changes appear instantly; JS changes reload the page and stay on the
+       same screen.
+
+  This folder (dev/) is for development only — leave it out of the Chrome Web
+  Store zip, like e2e/ and postman/.
+-->
+<link rel="stylesheet" href="../content.css">
+<style>
+  /* Stand-in for an IMDb page behind the panel */
+  body { margin: 0; background: #f2f2f2; font-family: Arial, sans-serif; color: #222; }
+  .fake-imdb-bar { background: #121212; height: 56px; display: flex; align-items: center; padding: 0 20px; }
+  .fake-imdb-logo { background: #f5c518; color: #000; font-weight: 900; padding: 4px 8px; border-radius: 4px; font-size: 20px; }
+  .fake-imdb-page { max-width: 760px; padding: 24px 20px; line-height: 1.6; color: #555; }
+
+  /* Screen picker */
+  #previewBar { position: fixed; top: 64px; left: 12px; z-index: 2147483647; background: #fff; border: 1px solid #ccc;
+    border-radius: 8px; padding: 10px; width: 210px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 12px; }
+  #previewBar b { display: block; margin-bottom: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  #previewBar button { display: block; width: 100%; text-align: left; margin: 3px 0; padding: 5px 8px; border: 1px solid #ddd;
+    border-radius: 5px; background: #fafafa; cursor: pointer; font-size: 12px; }
+  #previewBar button.on { background: #f5c518; border-color: #c9a20f; font-weight: 700; }
+  #previewBar .note { margin-top: 8px; color: #888; font-size: 11px; line-height: 1.4; }
+</style>
+
+<script>
+  // Fake the bits of Chrome's extension API the panel uses, so it runs on a normal page.
+  (function () {
+    const store = { displayName: 'Mr Van Damme', playerId: 'me', panelCollapsed: false };
+    const pick = (keys) => {
+      if (keys == null) return { ...store };
+      if (typeof keys === 'string') keys = [keys];
+      if (Array.isArray(keys)) return Object.fromEntries(keys.filter(k => k in store).map(k => [k, store[k]]));
+      return Object.fromEntries(Object.keys(keys).map(k => [k, k in store ? store[k] : keys[k]]));
+    };
+    const done = (cb, v) => { if (cb) cb(v); return Promise.resolve(v); };
+    window.chrome = {
+      runtime: { id: 'preview', getURL: (p) => '../' + p, sendMessage: (m, cb) => done(cb, {}), onMessage: { addListener() {} }, lastError: null },
+      storage: {
+        local: {
+          get: (k, cb) => done(cb, pick(k)),
+          set: (o, cb) => { Object.assign(store, o); return done(cb); },
+          remove: (k, cb) => { [].concat(k).forEach(x => delete store[x]); return done(cb); },
+        },
+        onChanged: { addListener() {} },
+      },
+    };
+    // No network: Firebase/Oracle calls just never answer.
+    window.fetch = () => new Promise(() => {});
+    // Don't let preview clicks (Leave, Give Up…) pop up dialogs.
+    window.confirm = () => false;
+    window.alert = (m) => console.log('[alert]', m);
+  })();
+</script>
+</head>
+<body>
+<div class="fake-imdb-bar"><span class="fake-imdb-logo">IMDb</span></div>
+<div class="fake-imdb-page">
+  <h1 style="color:#222">Tom Hanks</h1>
+  <p>This is a stand-in IMDb page so you can judge the panel against a real-ish background.
+  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt
+  ut labore et dolore magna aliqua.</p>
+  <p>Known for: Apollo 13 · Sleepless in Seattle · Forrest Gump · Cast Away</p>
+</div>
+
+<div id="previewBar"><b>Preview screen</b><div id="previewButtons"></div>
+  <div class="note">Edit content.css or ui.js and save — this page updates by itself (with Live Server).</div>
+</div>
+
+<!-- The extension's own scripts, in the same order as manifest.json
+     (page-filters.js and main.js are left out — they act on real IMDb pages). -->
+<script src="../actors.js"></script>
+<script src="../config.js"></script>
+<script src="../utils.js"></script>
+<script src="../firebase.js"></script>
+<script src="../stats.js"></script>
+<script src="../imdb.js"></script>
+<script src="../ui.js"></script>
+<script src="../game.js"></script>
+
+<script>
+  // ---------- made-up data ----------
+  const NOW = Date.now();
+  const HANKS = { name: 'Tom Hanks', url: 'https://www.imdb.com/name/nm0000158/' };
+  const BACON = { name: 'Kevin Bacon', url: 'https://www.imdb.com/name/nm0000102/' };
+  const NAMES = ['Mr Van Damme', 'Kitrano', 'Bot Bob', 'Sally', 'Big Dave', 'Quinn'];
+
+  function makePlayers(n, extra = () => ({})) {
+    const players = {};
+    for (let i = 0; i < n; i++) {
+      const pid = i === 0 ? 'me' : 'p' + i;
+      players[pid] = { name: NAMES[i], clicks: 0, ready: true, lastSeen: NOW, ...extra(i, pid) };
+    }
+    return players;
+  }
+
+  const CHAT = {
+    c1: { name: 'Kitrano', text: 'good luck all', timestamp: NOW - 90000 },
+    c2: { name: 'Mr Van Damme', text: "you're going down 🥋", timestamp: NOW - 60000 },
+  };
+
+  function finishedGame(n, { optimal = true } = {}) {
+    const players = makePlayers(n, (i) => (i === n - 1 && n > 2)
+      ? { name: NAMES[i], gaveUp: true, gaveUpVoluntarily: true, clicks: 1 }
+      : { clicks: i + 1, finishedAt: NOW - 30000 + i * 7000, clickPath: ['Tom Hanks', 'Apollo 13', 'Kevin Bacon'] });
+    const wins = { me: 2, p1: 1 };
+    return {
+      status: 'finished', hostId: 'me', gameMode: 'fewest', roundTimeLimitMs: 300000,
+      actorA: HANKS, actorB: BACON, winner: 'me', winnerClicks: 1, endedAt: NOW - 5000, endedBy: 'completed',
+      players, participants: Object.fromEntries(Object.keys(players).map(p => [p, true])), wins,
+      roundHistory: { r1: { winnerPid: 'me' }, r2: { winnerPid: 'p1' }, r3: { winnerPid: 'me' } },
+      optimalPath: optimal
+        ? { path: ['Tom Hanks', 'Apollo 13', 'Kevin Bacon'], actorClicks: 1 }
+        : { loading: true },
+      chat: CHAT,
+    };
+  }
+
+  // Each screen: what state to fake. role = 'host' | 'guest'; game = snapshot (or null).
+  const SCREENS = {
+    'start':        { label: 'Start (not in a game)', role: null, game: null },
+    'lobby-host':   { label: 'Lobby — host', role: 'host', game: () => ({
+                        status: 'lobby', hostId: 'me', gameMode: 'fewest', roundTimeLimitMs: 300000,
+                        players: makePlayers(3), chat: CHAT }) },
+    'lobby-guest':  { label: 'Lobby — guest', role: 'guest', me: 'p1', game: () => ({
+                        status: 'lobby', hostId: 'me', gameMode: 'fastest', roundTimeLimitMs: 600000,
+                        players: makePlayers(3), chat: CHAT }) },
+    'round':        { label: 'Round in play', role: 'host', clickPath: ['Tom Hanks', 'Apollo 13', 'Meg Ryan'], game: () => ({
+                        status: 'active', hostId: 'me', gameMode: 'fewest', roundTimeLimitMs: 300000,
+                        startedAt: NOW - 75000, roundKey: NOW - 75000, actorA: HANKS, actorB: BACON,
+                        players: makePlayers(3, (i) => ({ clicks: i, ready: false })), chat: CHAT }) },
+    'round-urgent': { label: 'Round — last 30s (red timer)', role: 'host', clickPath: ['Tom Hanks'], game: () => ({
+                        status: 'active', hostId: 'me', gameMode: 'fastest', roundTimeLimitMs: 300000,
+                        startedAt: NOW - 280000, roundKey: NOW - 280000, actorA: HANKS, actorB: BACON,
+                        players: makePlayers(3, (i) => ({ clicks: i + 1, ready: false })), chat: CHAT }) },
+    'winners-2':    { label: 'Winners board — 2 players', role: 'host', game: () => finishedGame(2) },
+    'winners-3':    { label: 'Winners board — 3 players', role: 'host', game: () => finishedGame(3) },
+    'winners-6':    { label: 'Winners board — 6 players', role: 'host', game: () => finishedGame(6) },
+    'profile':      { label: 'Profile / stats modal', role: null, game: null, profile: true },
+    'collapsed':    { label: 'Panel collapsed', role: null, game: null, collapsed: true },
+  };
+
+  // ---------- picker ----------
+  const current = SCREENS[location.hash.slice(1)] ? location.hash.slice(1) : 'start';
+  const btnBox = document.getElementById('previewButtons');
+  for (const [key, s] of Object.entries(SCREENS)) {
+    const b = document.createElement('button');
+    b.textContent = s.label;
+    if (key === current) b.className = 'on';
+    // Reload for each screen so nothing carries over from the last one.
+    b.onclick = () => { location.hash = key; location.reload(); };
+    btnBox.appendChild(b);
+  }
+
+  // ---------- draw the chosen screen with the extension's own functions ----------
+  const screen = SCREENS[current];
+  displayName = 'Mr Van Damme';
+  playerId = screen.me || 'me';
+  const game = typeof screen.game === 'function' ? screen.game() : null;
+
+  if (game) {
+    gameId = 'KITRA';
+    role = screen.role;
+    gameSnapshot = game;
+    if (game.actorA) actorPair = [game.actorA, game.actorB];
+    if (screen.clickPath) { clickPath = screen.clickPath; clicks = Math.floor(screen.clickPath.length / 2); }
+  }
+  updateGameControls();
+  refreshStatusUI(game);
+  if (game) {
+    renderPlayersList(game.players || {}, game.status, role === 'host');
+    if (game.chat) renderChat(game.chat);
+  }
+  if (screen.collapsed) applyPanelCollapse(true);
+  if (screen.profile) {
+    loadMyStats = async () => ({
+      name: 'Mr Van Damme', totalWins: 12, totalRounds: 20, totalGiveUps: 3,
+      vs: { p1: { wins: 7, losses: 4, lastName: 'Kitrano' }, p2: { wins: 5, losses: 4, lastName: 'Bot Bob' } },
+      byMode: {
+        fewest:  { totalWins: 8, totalRounds: 13, totalGiveUps: 2, vs: { p1: { wins: 5, losses: 3, lastName: 'Kitrano' } } },
+        fastest: { totalWins: 4, totalRounds: 7, totalGiveUps: 1, vs: { p2: { wins: 4, losses: 3, lastName: 'Bot Bob' } } },
+      },
+    });
+    openProfileModal();
+  }
+</script>
+</body>
+</html>
