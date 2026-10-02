@@ -49,8 +49,11 @@
       return Object.fromEntries(Object.keys(keys).map(k => [k, k in store ? store[k] : keys[k]]));
     };
     const done = (cb, v) => { if (cb) cb(v); return Promise.resolve(v); };
+    // Read the real manifest.json so the version shown matches the extension's.
+    let manifest = { version: '?' };
+    try { const x = new XMLHttpRequest(); x.open('GET', '../manifest.json', false); x.send(); manifest = JSON.parse(x.responseText); } catch (e) {}
     window.chrome = {
-      runtime: { id: 'preview', getURL: (p) => '../' + p, sendMessage: (m, cb) => done(cb, {}), onMessage: { addListener() {} }, lastError: null },
+      runtime: { id: 'preview', getManifest: () => manifest, getURL: (p) => '../' + p, sendMessage: (m, cb) => done(cb, {}), onMessage: { addListener() {} }, lastError: null },
       storage: {
         local: {
           get: (k, cb) => done(cb, pick(k)),
