@@ -171,7 +171,6 @@ const STATIC_ACTOR_LIST = [
   { name: "Nicole Kidman", url: "https://www.imdb.com/name/nm0000173/" },
   { name: "Julia Roberts", url: "https://www.imdb.com/name/nm0000210/" },
   { name: "Reese Witherspoon", url: "https://www.imdb.com/name/nm0000702/" },
-  { name: "Annette Bening", url: "https://www.imdb.com/name/nm0000906/" },
   { name: "Judi Dench", url: "https://www.imdb.com/name/nm0001132/" },
   { name: "Helena Bonham Carter", url: "https://www.imdb.com/name/nm0000307/" },
   { name: "Naomi Watts", url: "https://www.imdb.com/name/nm0915208/" },

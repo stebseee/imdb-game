@@ -139,3 +139,73 @@ async function fetchActorListFromIMDB() {
   }
 }
 
+// ----------------------
+// Actor headshots — read the og:image tag from the actor's IMDB name page.
+// Cached in chrome.storage keyed by nm ID so each actor page is only fetched once
+// per client per cache window. Fetches run in the background (content script runs
+// on imdb.com, so the request is same-origin and ships the site's cookies).
+const HEADSHOT_CACHE_KEY = 'headshotsCache';
+const HEADSHOT_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
+const _headshotInflight = new Set(); // nm IDs currently being fetched (dedupes concurrent calls)
+
+async function fetchHeadshotSrc(actorUrl) {
+  try {
+    const res = await fetch(actorUrl.replace(/\/$/, ''), {
+      headers: { 'Accept': 'text/html,application/xhtml+xml' }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const meta = doc.querySelector('meta[property="og:image"]');
+    const src = meta && meta.getAttribute('content') ? meta.getAttribute('content').trim() : null;
+    return (src && src.startsWith('http')) ? src : null;
+  } catch (err) {
+    console.warn(`[Headshots] Fetch failed for ${actorUrl}:`, err.message);
+    return null;
+  }
+}
+
+// Resolve headshot URLs for a list of actors. Reads the cache first, fetches only
+// what's missing, returns { nmId: imageUrl } for every actor that has a photo.
+async function resolveHeadshotUrls(actors) {
+  let stored;
+  try {
+    stored = await storageGet([HEADSHOT_CACHE_KEY]);
+  } catch (_) { stored = {}; }
+  const cache = (stored && stored[HEADSHOT_CACHE_KEY]) || {};
+  const now = Date.now();
+  const results = {};
+  const toFetch = [];
+
+  for (const actor of actors || []) {
+    const nmId = (actor && actor.url) ? actor.url.match(/nm\d+/)?.[0] : null;
+    if (!nmId) continue;
+    const cached = cache[nmId];
+    if (cached && cached.src && (now - (cached.fetchedAt || 0)) < HEADSHOT_CACHE_TTL) {
+      results[nmId] = cached.src;
+    } else if (!_headshotInflight.has(nmId)) {
+      _headshotInflight.add(nmId);
+      toFetch.push({ actor, nmId });
+    }
+  }
+
+  if (toFetch.length > 0) {
+    await Promise.all(toFetch.map(async ({ actor, nmId }) => {
+      try {
+        const src = await fetchHeadshotSrc(actor.url);
+        if (src) {
+          cache[nmId] = { src, fetchedAt: Date.now() };
+          results[nmId] = src;
+        }
+      } catch (err) {
+        console.warn(`[Headshots] resolve failed for ${actor.url}:`, err.message);
+      } finally {
+        _headshotInflight.delete(nmId);
+      }
+    }));
+    try { await storageSet({ [HEADSHOT_CACHE_KEY]: cache }); } catch (_) {}
+  }
+
+  return results;
+}
+

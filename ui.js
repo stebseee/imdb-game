@@ -2097,6 +2097,102 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// In-memory mirror of the headshots cache so refreshStatusUI doesn't re-read
+// chrome.storage on every SSE event. Seeded lazily by ensureActorHeadshots().
+const _headshotCache = {};
+
+// One actor block for the side-by-side round-target panel: small thumbnail + name
+// + a label telling the player whether this is the starting actor or the target.
+// Thumbnails are clickable — openHeadshotLightbox() zooms in on tap/click.
+function actorBlockHtml(label, actor) {
+  const nmId = (actor && actor.url) ? actor.url.match(/nm\d+/)?.[0] : null;
+  const src = nmId ? (_headshotCache[nmId] || null) : null;
+  const img = src
+    ? `<img src="${escapeHtml(src)}" data-headshot="${escapeHtml(src)}" alt="" referrerpolicy="no-referrer" decoding="async" title="Click to zoom" style="width:36px;height:48px;object-fit:cover;border-radius:4px;flex-shrink:0;cursor:zoom-in;box-shadow:0 0 3px rgba(0,0,0,0.35);"/>`
+    : `<span style="display:inline-block;width:36px;height:48px;border-radius:4px;background:rgba(0,0,0,0.10);flex-shrink:0;"></span>`;
+  return `<div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 0;">${img}<div style="display:flex;flex-direction:column;min-width:0;line-height:1.15;"><span style="font-size:16px;font-weight:800;line-height:1.2;white-space:normal;overflow-wrap:anywhere;">${escapeHtml(actor.name)}</span><span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;opacity:0.45;margin-top:2px;">${label}</span></div></div>`;
+}
+
+function actorPairHtml(actorA, actorB) {
+  if (!actorA || !actorB || !actorA.name || !actorB.name) return '';
+  return `<div style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px;">${actorBlockHtml('from', actorA)}<span style="opacity:0.45;font-size:16px;font-weight:400;flex-shrink:0;">→</span>${actorBlockHtml('target', actorB)}</div>`;
+}
+
+// ── Headshot lightbox ──────────────────────────────────────────
+let _lightbox = null; // { el, img } created lazily on first open
+function ensureLightbox() {
+  if (_lightbox) return _lightbox;
+  const el = document.createElement("div");
+  Object.assign(el.style, {
+    position: "fixed", inset: "0", zIndex: "2147483646",
+    display: "none", alignItems: "center", justifyContent: "center",
+    background: "rgba(0,0,0,0.85)", cursor: "zoom-out",
+    fontFamily: "Arial, sans-serif",
+  });
+  const img = document.createElement("img");
+  Object.assign(img.style, {
+    maxWidth: "90vw", maxHeight: "90vh",
+    borderRadius: "8px", boxShadow: "0 6px 40px rgba(0,0,0,0.6)",
+  });
+  el.appendChild(img);
+  const close = () => { el.style.display = "none"; };
+  el.addEventListener("click", close);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  document.body.appendChild(el);
+  _lightbox = { el, img };
+  return _lightbox;
+}
+function openHeadshotLightbox(src) {
+  const lb = ensureLightbox();
+  lb.img.src = src;
+  lb.el.style.display = "flex";
+}
+
+// Delegated click handling for the target panel — every thumbnail (<img data-headshot>)
+// inside gameInfo zooms into the lightbox, no matter how many times the row re-renders.
+gameInfo.addEventListener("click", (e) => {
+  const thumb = e.target && e.target.closest ? e.target.closest("img[data-headshot]") : null;
+  if (thumb) {
+    const src = thumb.getAttribute("data-headshot");
+    if (src) openHeadshotLightbox(src);
+  }
+});
+
+// Re-render just the round-target area from the current actorPair (used both by
+// refreshStatusUI and after headshots finish loading, to avoid re-running the whole
+// status/timer refresh).
+function renderGameInfo() {
+  if (gameId && actorPair) {
+    gameInfo.innerHTML = `Game: <strong>${gameId}</strong>${actorPairHtml(actorPair[0], actorPair[1])}`;
+  } else {
+    gameInfo.innerHTML = "Game: <em>Not in a game</em>";
+  }
+}
+
+// Load headshots for any of the given actors we don't have yet, then repaint the
+// target panel once they arrive. Non-blocking; always safe to call.
+async function ensureActorHeadshots(actors) {
+  const missing = (actors || []).filter(a => {
+    const nmId = (a && a.url) ? a.url.match(/nm\d+/)?.[0] : null;
+    return nmId && !_headshotCache[nmId];
+  });
+  if (missing.length === 0) return;
+  let map;
+  try {
+    map = await resolveHeadshotUrls(missing);
+  } catch (_) {
+    return;
+  }
+  let changed = false;
+  for (const [nmId, src] of Object.entries(map || {})) {
+    if (src && !_headshotCache[nmId]) {
+      _headshotCache[nmId] = src;
+      changed = true;
+    }
+  }
+  if (changed) renderGameInfo();
+}
+
 function renderBreadcrumb() {
   if (!roundIsActive || !clickPath || clickPath.length === 0) {
     breadcrumbBox.style.display = 'none';
@@ -2121,19 +2217,18 @@ function refreshStatusUI(snapshotGame) {
   if (snapshotGame) {
     // In lobby, the next round's actors haven't been picked yet — always show TBD
     const isLobbyState = snapshotGame.status === 'lobby';
-    const actorADisplay = (!isLobbyState && snapshotGame.actorA) ? snapshotGame.actorA.name : 'TBD';
-    const actorBDisplay = (!isLobbyState && snapshotGame.actorB) ? snapshotGame.actorB.name : 'TBD';
-    gameInfo.innerHTML = `Game: <strong>${gameId}</strong><div style="margin-top:10px;font-size:19px;font-weight:800;color:#000;line-height:1.35;">${actorADisplay} <span style="opacity:0.45;font-size:16px;font-weight:400;">→</span> ${actorBDisplay}</div>`;
-    if (!isLobbyState) {
-      actorPair = snapshotGame.actorA && snapshotGame.actorB ? [snapshotGame.actorA, snapshotGame.actorB] : actorPair;
+    if (!isLobbyState && snapshotGame.actorA && snapshotGame.actorB) {
+      actorPair = [snapshotGame.actorA, snapshotGame.actorB];
       storageSet({ actorPair }).catch(() => {});
+      renderGameInfo();
+      ensureActorHeadshots(actorPair).catch(() => {});
+    } else if (isLobbyState) {
+      gameInfo.innerHTML = `Game: <strong>${gameId}</strong><div style="margin-top:10px;font-size:19px;font-weight:800;color:#000;line-height:1.35;">TBD <span style="opacity:0.45;font-size:16px;font-weight:400;">→</span> TBD</div>`;
+    } else {
+      renderGameInfo();
     }
   } else {
-    if (gameId && actorPair) {
-      gameInfo.innerHTML = `Game: <strong>${gameId}</strong><div style="margin-top:10px;font-size:19px;font-weight:800;color:#000;line-height:1.35;">${actorPair[0].name} <span style="opacity:0.45;font-size:16px;font-weight:400;">→</span> ${actorPair[1].name}</div>`;
-    } else {
-      gameInfo.innerHTML = "Game: <em>Not in a game</em>";
-    }
+    renderGameInfo();
   }
 
   // ROUND TIMER: drive with a local 1s interval so it ticks smoothly independent of SSE events
