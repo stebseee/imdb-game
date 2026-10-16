@@ -14,9 +14,14 @@
 //     totalGiveUps,    // rounds where the player clicked Give Up (OVERALL). Counted
 //                      // separately from losses: a give-up the opponent then wins
 //                      // is a loss AND a give-up; a no-contest give-up is only a give-up.
+//     totalDNFs,       // rounds the player was in but neither finished nor gave up
+//                      // (ran out of time, or was still playing when someone else won).
+//                      // Counted ON TOP OF the loss, exactly like a give-up — and, like
+//                      // wins/losses, only in rounds somebody actually won. A no-contest
+//                      // (nobody finished) records no DNF. Mutually exclusive with a give-up.
 //     byMode: {        // per-mode breakdown, added in Phase 7 (fills from now on)
-//       fewest:  { totalWins, totalRounds, totalGiveUps, vs: { {opponentId}: { wins, losses, lastName } } },
-//       fastest: { totalWins, totalRounds, totalGiveUps, vs: { {opponentId}: { wins, losses, lastName } } },
+//       fewest:  { totalWins, totalRounds, totalGiveUps, totalDNFs, vs: { {opponentId}: { wins, losses, lastName } } },
+//       fastest: { totalWins, totalRounds, totalGiveUps, totalDNFs, vs: { {opponentId}: { wins, losses, lastName } } },
 //     }
 //   }
 //   win% = totalWins / totalRounds
@@ -105,6 +110,7 @@ const MIN_PLAYERS_FOR_STATS = 2;
 //                    matching byMode bucket alongside the overall totals. An
 //                    unknown mode still counts toward overall, but gets no bucket.
 //   quitPids:        players who clicked Give Up this round
+//   dnfPids:         players who didn't finish and didn't click Give Up (DNF)
 // Rules:
 //   - A round only counts toward wins/losses if somebody finished and won.
 //     Nobody finishing (everyone gave up, or time ran out) is a no-contest:
@@ -112,8 +118,10 @@ const MIN_PLAYERS_FOR_STATS = 2;
 //   - Every Give Up click counts toward totalGiveUps, whatever the outcome. So a
 //     give-up where the opponent then wins is BOTH a loss and a give-up, and a
 //     give-up in a no-contest round is a give-up only.
+//   - A DNF counts toward totalDNFs only in a round somebody won, on top of that
+//     round's loss (same shape as a give-up). In a no-contest round nobody DNFs.
 // No-op for solo rounds (fewer than MIN_PLAYERS_FOR_STATS players).
-async function recordRoundStats({ participantPids, winnerPid, nameOf, gameMode, quitPids }) {
+async function recordRoundStats({ participantPids, winnerPid, nameOf, gameMode, quitPids, dnfPids }) {
   try {
     if (!participantPids || participantPids.length < MIN_PLAYERS_FOR_STATS) return;
     const now = Date.now();
@@ -168,9 +176,109 @@ async function recordRoundStats({ participantPids, winnerPid, nameOf, gameMode, 
       }
     }
 
+    // Did-not-finish: only in a round somebody won, and only for players who
+    // neither finished nor gave up. Sits on top of that round's loss, exactly
+    // like a give-up (and can't be both — dnfPids excludes quitters).
+    if (winnerPid) {
+      for (const pid of (dnfPids || [])) {
+        if (!participantPids.includes(pid) || quitters.includes(pid)) continue;
+        touch(pid);
+        update[`${pid}/totalDNFs`] = _fbIncrement;
+        if (mode) update[`${pid}/${modePrefix}totalDNFs`] = _fbIncrement;
+      }
+    }
+
     if (Object.keys(update).length === 0) return; // no-contest with no give-ups: nothing to write
     await playersPatch('', update);
   } catch (e) {
     console.warn('[Stats] Could not record round into career stats', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LOCAL "fun" stats — this browser only.
+//
+// Cosmetic lifetime counters that never affect gameplay and are deliberately
+// NOT synced to Firebase: they live in chrome.storage.local so they cost nothing,
+// stay private, and can't disturb the shared career stats. Shown under "Show
+// more" on the profile modal. Because they're local, a player on a new device
+// starts them from zero (unlike wins/losses, which follow the browser identity).
+//
+// Shape (chrome.storage key 'localFunStats'):
+//   { rounds,        // rounds you were in that concluded (any mode, incl. solo)
+//     totalClicks,   // every actor click across those rounds
+//     finishes,      // rounds you reached the target
+//     firstFinishes, // rounds you were first to reach the target
+//     wins,          // rounds you won
+//     bestWinClicks, // fewest clicks in a round you won (null = none yet)
+//     fastestWinMs,  // quickest win, round-start → your finish (null = none yet)
+//     winStreak,     // current consecutive-win streak
+//     bestWinStreak, // longest ever
+//     lastRoundKey } // dedupe guard: the last round folded in
+const LOCAL_STATS_KEY = 'localFunStats';
+
+function emptyLocalStats() {
+  return {
+    rounds: 0, totalClicks: 0, finishes: 0, firstFinishes: 0, wins: 0,
+    bestWinClicks: null, fastestWinMs: null, winStreak: 0, bestWinStreak: 0,
+    lastRoundKey: null,
+  };
+}
+
+// Load this browser's fun stats, or null if none recorded yet.
+async function loadLocalStats() {
+  try { return (await storageGet(LOCAL_STATS_KEY))[LOCAL_STATS_KEY] || null; }
+  catch (e) { console.warn('[Stats] Could not load local fun stats', e); return null; }
+}
+
+// Fold one concluded round into this browser's local fun stats. Called by every
+// client for its OWN player, so it only ever writes the local player's numbers.
+// Deduped on roundKey (persisted in storage) because processSnapshot runs on
+// every stream update and every IMDb page reload.
+//   me: the local playerId. players: snapshot players map. participantPids:
+//   everyone in this round. winnerPid: round winner or null. startedAt/endedAt:
+//   the round's ms timestamps.
+async function recordLocalRoundStats({ roundKey, me, players, participantPids, winnerPid, startedAt, endedAt }) {
+  try {
+    if (!me || !roundKey || !participantPids || !participantPids.includes(me)) return;
+    const stored = (await storageGet(LOCAL_STATS_KEY))[LOCAL_STATS_KEY];
+    const stats = Object.assign(emptyLocalStats(), stored || {});
+    if (stats.lastRoundKey === roundKey) return; // already folded in
+    const meRec = players[me] || {};
+    const myClicks = Number(meRec.clicks ?? 0);
+
+    stats.lastRoundKey = roundKey;
+    stats.rounds += 1;
+    stats.totalClicks += myClicks;
+    if (meRec.finishedAt && !meRec.gaveUp) stats.finishes += 1;
+
+    // Were we the first to reach the target this round?
+    const finishers = participantPids
+      .map(pid => ({ pid, at: Number(players[pid]?.finishedAt) || 0 }))
+      .filter(f => f.at > 0)
+      .sort((a, b) => a.at - b.at);
+    if (finishers.length && finishers[0].pid === me) stats.firstFinishes += 1;
+
+    // Win streak + win bests only move in a real contest (>= 2 players), so a
+    // solo practice round can't hand you a "win" or a 1-click "best round".
+    if (winnerPid && participantPids.length >= 2) {
+      if (winnerPid === me) {
+        stats.wins += 1;
+        stats.bestWinClicks = stats.bestWinClicks == null ? myClicks : Math.min(stats.bestWinClicks, myClicks);
+        const start = Number(startedAt) || 0, myFinish = Number(meRec.finishedAt) || 0;
+        if (start && myFinish) {
+          const ms = myFinish - start;
+          stats.fastestWinMs = stats.fastestWinMs == null ? ms : Math.min(stats.fastestWinMs, ms);
+        }
+        stats.winStreak += 1;
+        stats.bestWinStreak = Math.max(stats.bestWinStreak, stats.winStreak);
+      } else {
+        stats.winStreak = 0; // someone else won: streak over (a no-contest leaves it)
+      }
+    }
+
+    await storageSet({ [LOCAL_STATS_KEY]: stats });
+  } catch (e) {
+    console.warn('[Stats] Could not record local fun stats', e);
   }
 }

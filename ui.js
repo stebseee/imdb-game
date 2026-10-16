@@ -1145,16 +1145,21 @@ function _makeStatCard(label, accent, testKey) {
   return { card, val, sub };
 }
 const _cardsRow = document.createElement("div");
-Object.assign(_cardsRow.style, { display: "flex", gap: "6px", marginBottom: "16px" });
+Object.assign(_cardsRow.style, { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px", marginBottom: "16px" });
 const _winsCard = _makeStatCard("wins", false, "wins");
 const _lossesCard = _makeStatCard("losses", false, "losses");
 // Give-ups are their own counter, not a subset of losses: a give-up the opponent
 // then wins counts in both; a give-up in a round nobody finished is only this.
 const _giveUpsCard = _makeStatCard("gave up", false, "giveups");
+// DNF = in a round somebody won, you neither finished nor gave up (ran out of
+// time / were still playing). Counted on top of the loss, exactly like a give-up.
+const _dnfCard = _makeStatCard("didn't finish", false, "dnfs");
 const _rateCard = _makeStatCard("win rate", true, "winrate");
+_rateCard.card.style.gridColumn = "span 2"; // sits beside DNF on the second row
 _cardsRow.appendChild(_winsCard.card);
 _cardsRow.appendChild(_lossesCard.card);
 _cardsRow.appendChild(_giveUpsCard.card);
+_cardsRow.appendChild(_dnfCard.card);
 _cardsRow.appendChild(_rateCard.card);
 _profileModal.body.appendChild(_cardsRow);
 
@@ -1166,6 +1171,72 @@ _profileModal.body.appendChild(_h2hHeading);
 const _h2hList = document.createElement("div");
 Object.assign(_h2hList.style, { border: "0.5px solid rgba(0,0,0,0.25)", borderRadius: "8px", overflow: "hidden", background: "rgba(255,255,255,0.4)" });
 _profileModal.body.appendChild(_h2hList);
+
+// "Show more" — local, this-browser-only fun stats (see stats.js). Deliberately
+// NOT filtered by the mode dropdown: they're lifetime counts across all modes.
+const _funToggle = document.createElement("button");
+_funToggle.type = "button";
+_funToggle.textContent = "Show more stats ▾";
+_funToggle.dataset.testid = "fun-toggle";
+Object.assign(_funToggle.style, {
+  marginTop: "14px", width: "100%", padding: "8px 10px", fontSize: "12px",
+  borderRadius: "8px", border: "1px solid rgba(0,0,0,0.25)", cursor: "pointer",
+  background: "rgba(255,255,255,0.55)", color: "#000", fontWeight: "700",
+});
+const _funPanel = document.createElement("div");
+_funPanel.dataset.testid = "fun-panel";
+Object.assign(_funPanel.style, {
+  display: "none", marginTop: "8px", border: "0.5px solid rgba(0,0,0,0.25)",
+  borderRadius: "8px", overflow: "hidden", background: "rgba(255,255,255,0.4)",
+});
+_profileModal.body.appendChild(_funToggle);
+_profileModal.body.appendChild(_funPanel);
+
+function _renderFunStats(stats) {
+  const s = stats || {};
+  const rounds = Number(s.rounds || 0);
+  const clicks = Number(s.totalClicks || 0);
+  const rowsList = [
+    ["Total clicks", String(clicks), "fun-totalclicks"],
+    ["Average clicks / round", rounds ? (clicks / rounds).toFixed(1) : "—", "fun-avgclicks"],
+    ["Best winning round", s.bestWinClicks == null ? "—" : `${s.bestWinClicks} click${s.bestWinClicks === 1 ? "" : "s"}`, "fun-bestwin"],
+    ["Fastest win", s.fastestWinMs == null ? "—" : formatDuration(s.fastestWinMs), "fun-fastestwin"],
+    ["Current win streak", String(Number(s.winStreak || 0)), "fun-streak"],
+    ["Best win streak", String(Number(s.bestWinStreak || 0)), "fun-beststreak"],
+    ["Times first to finish", String(Number(s.firstFinishes || 0)), "fun-firstfinishes"],
+  ];
+  _funPanel.innerHTML = "";
+  rowsList.forEach(([label, value, key], i) => {
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      display: "flex", justifyContent: "space-between", padding: "8px 12px",
+      borderBottom: i < rowsList.length - 1 ? "0.5px solid rgba(0,0,0,0.15)" : "none",
+    });
+    const lab = document.createElement("span");
+    lab.textContent = label;
+    Object.assign(lab.style, { fontSize: "12px", color: "#000" });
+    const val = document.createElement("span");
+    val.textContent = value;
+    val.dataset.testid = key;
+    Object.assign(val.style, { fontSize: "12px", fontWeight: "700", color: "#000" });
+    row.appendChild(lab);
+    row.appendChild(val);
+    _funPanel.appendChild(row);
+  });
+  const note = document.createElement("div");
+  note.textContent = "Local to this browser — never uploaded. Solo practice adds clicks, not wins.";
+  Object.assign(note.style, { fontSize: "10px", color: "#5a4a00", padding: "7px 12px", borderTop: "0.5px solid rgba(0,0,0,0.15)" });
+  _funPanel.appendChild(note);
+}
+
+let _funOpen = false;
+function _setFunOpen(open) {
+  _funOpen = open;
+  _funPanel.style.display = open ? "block" : "none";
+  _funToggle.textContent = open ? "Hide extra stats ▴" : "Show more stats ▾";
+  if (open) loadLocalStats().then(_renderFunStats).catch(() => {});
+}
+_funToggle.addEventListener("click", () => _setFunOpen(!_funOpen));
 
 const _profileFootnote = document.createElement("div");
 _profileFootnote.textContent = "Stats are saved to this browser. Sign in later to carry them across devices.";
@@ -1196,11 +1267,13 @@ function renderCareerStats(stats) {
   const wins   = Number(source?.totalWins   ?? 0);
   const rounds = Number(source?.totalRounds ?? 0);
   const giveUps = Number(source?.totalGiveUps ?? 0);
+  const dnfs   = Number(source?.totalDNFs   ?? 0);
   const losses = Math.max(0, rounds - wins);
   const pct = rounds ? Math.round((wins / rounds) * 100) : 0;
   _winsCard.val.textContent = String(wins);
   _lossesCard.val.textContent = String(losses);
   _giveUpsCard.val.textContent = String(giveUps);
+  _dnfCard.val.textContent = String(dnfs);
   _rateCard.val.textContent = rounds ? pct + "%" : "—";
   // Show the sample size so a 100% after one round reads as what it is.
   _rateCard.sub.textContent = rounds ? `${rounds} round${rounds === 1 ? "" : "s"}` : "";
@@ -1259,6 +1332,7 @@ function openProfileModal() {
   setNameEditMode(false);
   _statsViewMode = "all";          // always open on the overall view
   _statsModeSelect.value = "all";  // reset the dropdown to match
+  _setFunOpen(false);              // extra stats start collapsed each open
   _profileModal.open();
   loadMyStats().then(renderCareerStats).catch(() => {});
 }

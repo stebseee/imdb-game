@@ -497,22 +497,26 @@ async function processSnapshot(snapshot) {
   if (snapshot.status === 'finished' && snapshot.endedAt) {
     const statsEndedAt = snapshot.endedAt;
     const roundKey = snapshot.roundKey;
+    // Who was in this round (not someone who joined mid-round). Shared by the
+    // career-stats fan-out and the local fun-stats fold-in below.
+    const roundMap = snapshot.participants || {};
+    const roundPids = Object.keys(roundMap).filter(pid => roundMap[pid] && players[pid]);
+    const participantPids = roundPids.length ? roundPids : playerIds;
     if (role === 'host' && snapshot.statsTracked && roundKey &&
         snapshot.statsRecordedRound !== roundKey &&
         roundKey !== _statsRecordedRound) {
       _statsRecordedRound = roundKey; // same-page dedupe while the flag write is in flight
-      // Count only players who were in this round (not someone who joined mid-round).
-      const roundMap = snapshot.participants || {};
-      const roundPids = Object.keys(roundMap).filter(pid => roundMap[pid] && players[pid]);
-      const participantPids = roundPids.length ? roundPids : playerIds;
       const nameOf = {};
       for (const pid of participantPids) nameOf[pid] = players[pid]?.name || `Player-${pid}`;
       // Players who actually clicked Give Up. (gaveUp alone isn't enough: the
       // round-end code also marks anyone who didn't finish as gaveUp.)
       const quitPids = participantPids.filter(pid => players[pid]?.gaveUpVoluntarily);
+      // Did-not-finish: anyone in the round who never reached the target and
+      // didn't click Give Up. Only counted when a winner exists (recordRoundStats).
+      const dnfPids = participantPids.filter(pid => !players[pid]?.finishedAt && !players[pid]?.gaveUpVoluntarily);
       // Claim the round first so a later page load can never record it again.
       dbPatch(`${gameId}`, { statsRecordedRound: roundKey })
-        .then(() => recordRoundStats({ participantPids, winnerPid: snapshot.winner || null, nameOf, gameMode: snapshot.gameMode, quitPids }))
+        .then(() => recordRoundStats({ participantPids, winnerPid: snapshot.winner || null, nameOf, gameMode: snapshot.gameMode, quitPids, dnfPids }))
         .then(() => { if (participantPids.includes(playerId)) return loadMyStats().then(renderCareerStats); })
         .catch(e => console.warn('[Stats] Could not record round', e));
     }
@@ -522,6 +526,13 @@ async function processSnapshot(snapshot) {
       _statsRefreshedEndedAt = refreshKey;
       if (playerIds.includes(playerId)) loadMyStats().then(renderCareerStats).catch(() => {});
     }
+    // Local (this-browser-only) fun stats: every client folds in THIS round for
+    // its own player. recordLocalRoundStats dedupes on roundKey, so the repeated
+    // snapshots and page reloads can't double-count.
+    recordLocalRoundStats({
+      roundKey, me: playerId, players, participantPids,
+      winnerPid: snapshot.winner || null, startedAt: snapshot.startedAt, endedAt: statsEndedAt,
+    });
   }
 
   // Detect being kicked: we have a gameId but our player record is gone.

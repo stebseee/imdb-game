@@ -192,14 +192,21 @@
   if (screen.collapsed) applyPanelCollapse(true);
   if (screen.profile) {
     loadMyStats = async () => ({
-      name: 'Mr Van Damme', totalWins: 12, totalRounds: 20, totalGiveUps: 3,
+      name: 'Mr Van Damme', totalWins: 12, totalRounds: 20, totalGiveUps: 3, totalDNFs: 5,
       vs: { p1: { wins: 7, losses: 4, lastName: 'Kitrano' }, p2: { wins: 5, losses: 4, lastName: 'Bot Bob' } },
       byMode: {
-        fewest:  { totalWins: 8, totalRounds: 13, totalGiveUps: 2, vs: { p1: { wins: 5, losses: 3, lastName: 'Kitrano' } } },
-        fastest: { totalWins: 4, totalRounds: 7, totalGiveUps: 1, vs: { p2: { wins: 4, losses: 3, lastName: 'Bot Bob' } } },
+        fewest:  { totalWins: 8, totalRounds: 13, totalGiveUps: 2, totalDNFs: 3, vs: { p1: { wins: 5, losses: 3, lastName: 'Kitrano' } } },
+        fastest: { totalWins: 4, totalRounds: 7, totalGiveUps: 1, totalDNFs: 2, vs: { p2: { wins: 4, losses: 3, lastName: 'Bot Bob' } } },
       },
     });
-    openProfileModal();
+    // Local fun stats (chrome.storage.local) — shown under "Show more".
+    storageSet({ localFunStats: {
+      rounds: 34, totalClicks: 187, finishes: 29, firstFinishes: 11, wins: 12,
+      bestWinClicks: 2, fastestWinMs: 51000, winStreak: 3, bestWinStreak: 5, lastRoundKey: NOW,
+    }}).then(() => {
+      openProfileModal();
+      document.querySelector('[data-testid="fun-toggle"]').click(); // open the extra stats
+    });
   }
 </script>
 </body>
